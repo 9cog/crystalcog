@@ -189,8 +189,17 @@ CrystalCog implements the complete OpenCog stack:
 - **Persistence**: Multiple storage backends (File, SQLite, Network)
 - **Cognitive Kernels**: Agent-Zero Genesis cognitive processing units with hypergraph state persistence
 - **Tensor Field Encoding**: Mathematical sequence generators for cognitive state representation
+- **Integration Framework**: Seamless integration with external systems (CogPy/PyG, Pygmalion, Galatea, Paphos)
 
 ### Key Features
+
+#### Integration Framework
+- **CogPy Bridge**: Python cognitive processing framework integration
+- **PyG Adapter**: PyTorch Geometric graph neural networks integration
+- **Pygmalion Agent**: Advanced conversational AI with Echo State Networks
+- **Galatea Frontend**: Web-based interface with REST API and WebSocket support
+- **Paphos Backend**: Data persistence and service coordination
+- **Crystal Accelerator**: Performance optimization and caching layer
 
 #### AtomSpace Persistence
 - **RocksDB Storage**: High-performance key-value storage (0.9ms store, 0.5ms load)
@@ -252,6 +261,31 @@ hypergraph_encoding = kernel.hypergraph_tensor_encoding
 
 # Save via REST API
 curl -X POST http://localhost:18080/storage/save
+```
+
+#### Integration Framework Usage
+```crystal
+require "./src/integrations/integration"
+
+# Create AtomSpace
+atomspace = AtomSpace::AtomSpace.new
+
+# Initialize integration manager
+manager = CrystalCogIntegration.create_manager
+manager.initialize_all_integrations(atomspace)
+
+# Execute integrated cognitive pipeline
+result = manager.execute_cognitive_pipeline("What is intelligence?")
+puts result["status"]  # => "completed"
+
+# Check integration status
+status = manager.get_integration_status
+status.each do |name, component_status|
+  puts "#{name}: #{component_status["status"]}"
+end
+
+# Or use from command line
+# ./crystalcog integration
 ```
 
 ## Validation & Dependency Checking
@@ -450,6 +484,9 @@ For complete documentation, see the [Documentation Index](docs/INDEX.md).
 - [Development Roadmap](docs/DEVELOPMENT-ROADMAP.md) - Project roadmap and implementation plan
 - [Crystal Installation Guide](docs/CRYSTAL_INSTALLATION.md) - Installation instructions
 - [API Documentation](docs/API_DOCUMENTATION.md) - Complete API reference
+- [Integration Guide](docs/INTEGRATION_GUIDE.md) - External system integration guide
+- [Integration API Reference](docs/INTEGRATION_API_REFERENCE.md) - Integration framework API
+- [Integration Implementation Summary](docs/INTEGRATION_IMPLEMENTATION_SUMMARY.md) - Integration framework overview
 - [Examples Guide](examples/README.md) - Example programs and usage
 - [Persistence API](docs/PERSISTENCE_API_DOCUMENTATION.md) - Storage backend documentation
 - [Advanced Pattern Matching](docs/ADVANCED_PATTERN_MATCHING.md) - Pattern matching guide
