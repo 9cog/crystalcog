@@ -14,6 +14,9 @@ require "./moses/moses_main"
 require "./ml/ml_main"
 require "./learning/learning_main"
 
+# Integration modules
+require "./integrations/integration"
+
 # Conditionally require server components
 {% if flag?(:with_cogserver) %}
   require "./cogserver/cogserver"
@@ -54,6 +57,9 @@ module CrystalCog
     when "test"
       puts "Running test AtomSpace operations..."
       test_basic_operations
+    when "integration"
+      puts "Running integration demo..."
+      test_integration_demo
     when "attention"
       puts "Running attention allocation demo..."
       test_attention_allocation
@@ -67,10 +73,11 @@ module CrystalCog
       puts "Running MOSES evolutionary search..."
       Moses.main(args[1..])
     else
-      puts "Usage: crystalcog [server|shell|test|attention|nlp|language-capabilities|moses]"
+      puts "Usage: crystalcog [server|shell|test|integration|attention|nlp|language-capabilities|moses]"
       puts "  server                  - Start the CogServer"
       puts "  shell                   - Start interactive shell"
       puts "  test                    - Run basic test operations"
+      puts "  integration             - Demo integration framework (cogpy/pyg/pygmalion/galatea/paphos)"
       puts "  attention               - Demo attention allocation mechanisms"
       puts "  nlp                     - Demo natural language processing"
       puts "  language-capabilities   - Demo language processing with reasoning"
@@ -89,6 +96,76 @@ module CrystalCog
     puts "Created atom: #{node}"
     puts "Created link: #{link}"
     puts "AtomSpace size: #{atomspace.size}"
+  end
+
+  # Test integration framework
+  private def self.test_integration_demo
+    puts "=== CrystalCog Integration Framework Demo ==="
+    puts ""
+    
+    # Create AtomSpace with sample data
+    atomspace = AtomSpace::AtomSpace.new
+    
+    # Add some cognitive concepts
+    puts "Creating cognitive concepts in AtomSpace..."
+    intelligence = atomspace.add_concept_node("intelligence")
+    consciousness = atomspace.add_concept_node("consciousness")
+    reasoning = atomspace.add_concept_node("reasoning")
+    
+    atomspace.add_inheritance_link(reasoning, intelligence)
+    puts "  Added: reasoning -> intelligence"
+    puts ""
+    
+    # Create integration manager
+    puts "Initializing Integration Manager..."
+    manager = CrystalCogIntegration.create_manager
+    puts "  Manager created"
+    puts ""
+    
+    # Initialize all integrations
+    puts "Initializing integration components:"
+    puts "  - CogPy Bridge (Python cognitive framework)"
+    puts "  - PyG Adapter (Graph Neural Networks)"
+    puts "  - Pygmalion Agent (Conversational AI)"
+    puts "  - Galatea Frontend (Web interface)"
+    puts "  - Paphos Backend (Data persistence)"
+    puts "  - Crystal Accelerator (Performance optimization)"
+    puts ""
+    
+    manager.initialize_all_integrations(atomspace)
+    puts "All integrations initialized successfully!"
+    puts ""
+    
+    # Show integration status
+    puts "Integration Status:"
+    status = manager.get_integration_status
+    status.each do |name, component_status|
+      puts "  #{name.upcase}:"
+      component_status.each do |key, value|
+        puts "    - #{key}: #{value}"
+      end
+    end
+    puts ""
+    
+    # Execute cognitive pipeline
+    puts "Executing integrated cognitive pipeline..."
+    input_query = "What is the relationship between reasoning and intelligence?"
+    puts "  Query: #{input_query}"
+    puts ""
+    
+    result = manager.execute_cognitive_pipeline(input_query)
+    
+    puts "Pipeline Results:"
+    result.each do |key, value|
+      puts "  - #{key}: #{value}"
+    end
+    puts ""
+    
+    # Shutdown
+    puts "Shutting down integrations..."
+    manager.shutdown_all
+    puts "Integration demo complete!"
+    puts ""
   end
 
   # Test attention allocation mechanisms
