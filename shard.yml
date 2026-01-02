@@ -36,6 +36,10 @@ targets:
   opencog_bin:
     main: src/opencog/opencog.cr
 
+  # Integration components
+  integration_demo:
+    main: examples/integration_examples/complete_integration_demo.cr
+
   # Reasoning engines
   pln_bin:
     main: src/pln/pln.cr

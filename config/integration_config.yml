@@ -1,0 +1,73 @@
+# Integration Configuration
+# This file contains configuration settings for all CrystalCog integration components
+
+# CogPy Bridge Configuration
+cogpy:
+  host: "localhost"
+  port: 5000
+  timeout: 30
+  # auth_token: "your-token-here"  # Optional authentication token
+
+# PyG (PyTorch Geometric) Adapter Configuration
+pyg:
+  backend_url: "http://localhost:8000"
+  batch_size: 32
+  embedding_dim: 128
+  use_gpu: false  # Set to true if GPU is available
+
+# Pygmalion Agent Configuration
+pygmalion:
+  api_url: "https://api.pygmalion.chat"
+  model_name: "pygmalion-13b"
+  max_context_length: 2048
+  temperature: 0.7
+  echo_state_enabled: true
+  
+  # Echo State Network Configuration
+  echo_state:
+    reservoir_size: 1000
+    spectral_radius: 0.95
+    sparsity: 0.1
+    tensor_signatures: true
+
+# Galatea Frontend Configuration
+galatea:
+  host: "0.0.0.0"
+  port: 3000
+  websocket_port: 3001
+  cors_enabled: true
+  max_connections: 100
+
+# Paphos Backend Configuration
+paphos:
+  backend_url: "http://localhost:4000"
+  # api_key: "your-api-key-here"  # Required for production
+  timeout: 30
+  retry_attempts: 3
+  enable_caching: true
+
+# Crystal Acceleration Engine Configuration
+accelerator:
+  enable_parallel_processing: true
+  thread_pool_size: 4
+  cache_size: 10000
+  optimization_level: 2  # 0=none, 1=basic, 2=standard, 3=aggressive
+  profile_performance: false  # Set to true for performance monitoring
+
+# Integration Options
+integration:
+  # Which integrations to enable on startup
+  enable_on_startup:
+    - cogpy
+    - pyg
+    - pygmalion
+    - galatea
+    - paphos
+    - accelerator
+  
+  # Auto-reconnect on connection loss
+  auto_reconnect: true
+  reconnect_delay: 5  # seconds
+  
+  # Logging level for integrations
+  log_level: "info"  # debug, info, warn, error
