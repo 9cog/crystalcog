@@ -1,0 +1,58 @@
+{
+  "name": "Redox OS Development",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "settings": {
+    "terminal.integrated.shell.linux": "/bin/bash"
+  },
+  "extensions": [
+    "rust-lang.rust-analyzer"
+  ],
+  "postCreateCommand": "cd /redox && make all",
+  "remoteUser": "root",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "moby": true,
+      "installDockerBuildx": true,
+      "version": "latest",
+      "dockerDashComposeVersion": "v2"
+    },
+    "ghcr.io/devcontainers/features/rust:1": {
+      "version": "latest",
+      "profile": "complete",
+      "targets": "x86_64-unknown-redox,x86_64-unknown-uefi"
+    },
+    "ghcr.io/rocker-org/devcontainer-features/rstudio-server:0": {
+      "allowReinstall": true,
+      "singleUser": true,
+      "version": "stable"
+    },
+    "ghcr.io/saml-to/devcontainer-features/assume-aws-role:2": {},
+    "devwasm.azurecr.io/dev-wasm/dev-wasm-feature/rust-wasi:0": {},
+    "ghcr.io/lee-orr/rusty-dev-containers/rust_windows_msvc:0": {},
+    "ghcr.io/lee-orr/rusty-dev-containers/wasm32-unknown-unknown:0": {},
+    "ghcr.io/cirolosapio/devcontainers-features/alpine-docker-outside-of-docker:0": {
+      "installDockerCompose": true
+    },
+    "ghcr.io/prulloac/devcontainer-features/deno:1": {},
+    "ghcr.io/lumenpink/devcontainer-features/bun:0": {},
+    "ghcr.io/lumenpink/devcontainer-features/wasm-pack:0": {},
+    "ghcr.io/va-h/devcontainers-features/uv:1": {
+      "version": "latest"
+    },
+    "ghcr.io/bartventer/arch-devcontainer-features/docker-outside-of-docker:1": {
+      "installDockerBuildx": true,
+      "installDockerComposeSwitch": true,
+      "enableDockerAutocompletion": true,
+      "version": "latest",
+      "dockerDashComposeVersion": "v2"
+    },
+    "ghcr.io/nils-geistmann/devcontainers-features/create-remote-user:0": {
+      "create": true,
+      "addToSudo": true,
+      "installSudo": true
+    }
+  }
+}

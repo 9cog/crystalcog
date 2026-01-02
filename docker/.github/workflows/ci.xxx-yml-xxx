@@ -1,0 +1,33 @@
+# Disabled, April 2024
+# Both this and publish-images.yml build the same docker containers.
+# We don't need to do this twice. Since that one also publishes the
+# containers to dockerhub, disable this script by renaming it to
+# `ci.xxx-yml-xxx` and hopefully that is enough to do the trick.
+# Keep this here, for now, "just in case". -- Linas April 2024
+
+name: CI
+
+on:
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - "opencog/**"
+      - ".github/workflows/**"
+  push:
+    branches: [ "master" ]
+    paths:
+      - "opencog/**"
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+jobs:
+  build_opencog_images:
+    name: Build opencog images
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout current repo
+        uses: actions/checkout@v4
+
+      - name: Build all opencog images
+        working-directory: opencog
+        run: ./docker-build.sh -bsl

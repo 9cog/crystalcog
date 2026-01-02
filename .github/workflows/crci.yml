@@ -1,0 +1,45 @@
+# This CI job installs Crystal and shard dependencies, then executes `crystal spec` to run the test suite
+# More configuration options are available at https://crystal-lang.github.io/install-crystal/configurator.html
+
+on:
+  push:
+  pull_request:
+    branches: [master]
+  schedule:
+    - cron: '0 6 * * 6'  # Every Saturday 6 AM
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+          - os: ubuntu-latest
+            crystal: "1.12"
+          - os: ubuntu-latest
+            crystal: nightly
+          - os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Download source
+        uses: actions/checkout@v4
+      - name: Install Crystal
+        uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: ${{ matrix.crystal }}
+      - name: Cache shards
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/shards
+          key: ${{ runner.os }}-shards-${{ hashFiles('shard.yml') }}
+          restore-keys: ${{ runner.os }}-shards-
+      - name: Install shards
+        run: shards update --ignore-crystal-version
+      - name: Run tests
+        run: |
+          # Run tests with error handling for compiler crashes
+          crystal spec --order=random --error-trace --no-color || {
+            echo "⚠️  Test run failed, retrying with single-threaded execution..."
+            CRYSTAL_WORKERS=1 crystal spec --order=random --error-trace --no-color
+          }
+

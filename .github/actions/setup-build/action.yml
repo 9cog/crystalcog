@@ -1,0 +1,22 @@
+# .github/actions/setup-build/action.yml
+
+name: 'Setup Build Environment'
+description: 'Sets up the build environment by restoring cache and configuring the build.'
+
+inputs:
+  branch:
+    description: 'Branch to build'
+    required: true
+    type: string
+
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - ${{ inputs.branch }}
+
+# Optionally, define outputs if needed
+# outputs:
+#   artifact_path:
+#     description: 'Path to the build artifacts'
+#     value: '/ws/<package_name>'

@@ -1,0 +1,363 @@
+name: Test Monitoring and Reporting
+
+on:
+  workflow_run:
+    workflows: 
+      - "Crystal Build and Test"
+      - "Comprehensive Crystal CI/CD"
+    types:
+      - completed
+  schedule:
+    # Generate weekly test reports every Monday at 8 AM UTC
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+    inputs:
+      report_type:
+        description: 'Type of report to generate'
+        required: true
+        default: 'summary'
+        type: choice
+        options:
+          - 'summary'
+          - 'detailed'
+          - 'trends'
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  test-monitoring:
+    name: Test Result Monitoring
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up reporting environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq curl
+        
+    - name: Fetch recent workflow runs
+      id: fetch-runs
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { owner, repo } = context.repo;
+          
+          // Fetch recent workflow runs for Crystal builds
+          const workflows = await github.rest.actions.listWorkflowRuns({
+            owner,
+            repo,
+            workflow_id: 'crystal-build.yml',
+            per_page: 20
+          });
+          
+          const comprehensiveRuns = await github.rest.actions.listWorkflowRuns({
+            owner,
+            repo,
+            workflow_id: 'crystal-comprehensive-ci.yml',
+            per_page: 20
+          }).catch(() => ({ data: { workflow_runs: [] } }));
+          
+          const allRuns = [
+            ...workflows.data.workflow_runs,
+            ...comprehensiveRuns.data.workflow_runs
+          ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          
+          // Analyze success/failure rates
+          const recent = allRuns.slice(0, 10);
+          const successful = recent.filter(run => run.conclusion === 'success').length;
+          const failed = recent.filter(run => run.conclusion === 'failure').length;
+          const cancelled = recent.filter(run => run.conclusion === 'cancelled').length;
+          
+          const stats = {
+            total: recent.length,
+            successful,
+            failed,
+            cancelled,
+            success_rate: (successful / recent.length * 100).toFixed(1),
+            recent_runs: recent.slice(0, 5).map(run => ({
+              id: run.id,
+              conclusion: run.conclusion,
+              created_at: run.created_at,
+              head_branch: run.head_branch,
+              head_sha: run.head_sha.substring(0, 7)
+            }))
+          };
+          
+          core.setOutput('stats', JSON.stringify(stats));
+          return stats;
+
+    - name: Generate test report
+      id: generate-report
+      run: |
+        # Parse the statistics from the previous step
+        echo '${{ steps.fetch-runs.outputs.stats }}' > run-stats.json
+        
+        # Create comprehensive test report
+        cat > test-report.md << 'EOF'
+        # CrystalCog Test Report
+        
+        **Generated:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+        **Report Type:** ${{ github.event.inputs.report_type || 'automatic' }}
+        
+        ## Test Statistics (Last 10 Runs)
+        
+        EOF
+        
+        # Add statistics to report
+        cat >> test-report.md << EOF
+        - **Total Runs:** $(jq -r '.total' run-stats.json)
+        - **Successful:** $(jq -r '.successful' run-stats.json)
+        - **Failed:** $(jq -r '.failed' run-stats.json)
+        - **Cancelled:** $(jq -r '.cancelled' run-stats.json)
+        - **Success Rate:** $(jq -r '.success_rate' run-stats.json)%
+        
+        ## Recent Test Runs
+        
+        | Run ID | Status | Branch | Commit | Date |
+        |--------|--------|--------|--------|------|
+        EOF
+        
+        # Add recent runs table
+        jq -r '.recent_runs[] | "| \(.id) | \(.conclusion) | \(.head_branch) | \(.head_sha) | \(.created_at) |"' run-stats.json >> test-report.md
+        
+        cat >> test-report.md << 'EOF'
+        
+        ## Component Test Status
+        
+        ### Core Components
+        - **cogutil**: Logger, Config, Random number generation
+        - **atomspace**: Atom handling, Truth values, AtomSpace operations  
+        - **opencog**: Core reasoning algorithms
+        - **pln**: Probabilistic Logic Networks
+        - **cogserver**: Network API server
+        - **pattern_matching**: Pattern matching engine
+        
+        ### Test Coverage Analysis
+        
+        Current test files:
+        - Unit tests: `spec/` directory
+        - Integration tests: Root directory `test_*.cr` files
+        - Performance benchmarks: `benchmarks/` directory
+        
+        ### Recommendations
+        
+        Based on recent test results:
+        EOF
+        
+        # Add recommendations based on success rate
+        success_rate=$(jq -r '.success_rate | tonumber' run-stats.json)
+        if (( $(echo "$success_rate < 80" | bc -l) )); then
+          echo "- ⚠️ **Low success rate detected** ($success_rate%) - investigate failing tests" >> test-report.md
+          echo "- Consider adding more stable integration tests" >> test-report.md
+          echo "- Review error patterns in recent failures" >> test-report.md
+        elif (( $(echo "$success_rate < 95" | bc -l) )); then
+          echo "- 🔶 **Moderate success rate** ($success_rate%) - room for improvement" >> test-report.md
+          echo "- Consider adding retry mechanisms for flaky tests" >> test-report.md
+        else
+          echo "- ✅ **High success rate** ($success_rate%) - tests are stable" >> test-report.md
+          echo "- Consider expanding test coverage to new components" >> test-report.md
+        fi
+        
+        echo "" >> test-report.md
+        echo "---" >> test-report.md
+        echo "*This report was automatically generated by the Test Monitoring workflow.*" >> test-report.md
+
+    - name: Check for failing tests pattern
+      id: check-patterns
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const stats = JSON.parse('${{ steps.fetch-runs.outputs.stats }}');
+          
+          // Check if we have multiple recent failures
+          const recentFailures = stats.recent_runs.filter(run => run.conclusion === 'failure');
+          const shouldCreateIssue = recentFailures.length >= 2 && stats.success_rate < 80;
+          
+          if (shouldCreateIssue) {
+            // Create issue for test instability
+            const issueTitle = '[Test Monitoring] Multiple Test Failures Detected';
+            const issueBody = `
+        ## Test Stability Issue Detected
+        
+        The automated test monitoring has detected multiple test failures in recent runs.
+        
+        ### Statistics
+        - **Success Rate**: ${stats.success_rate}% (last 10 runs)
+        - **Recent Failures**: ${recentFailures.length}
+        - **Failed Runs**: ${recentFailures.map(r => `#${r.id} (${r.head_branch})`).join(', ')}
+        
+        ### Recent Failed Runs
+        ${recentFailures.map(run => `- Run #${run.id}: Branch \`${run.head_branch}\`, Commit \`${run.head_sha}\`, Date: ${run.created_at}`).join('\n')}
+        
+        ### Recommended Actions
+        1. Investigate common failure patterns in the above runs
+        2. Check for environmental issues (dependencies, system changes)
+        3. Review recent code changes that might have introduced instability
+        4. Consider adding retry mechanisms for flaky tests
+        5. Improve test isolation and cleanup procedures
+        
+        ### Next Steps
+        - [ ] Review failed run logs for error patterns
+        - [ ] Identify root cause of test instability
+        - [ ] Implement fixes for identified issues
+        - [ ] Monitor success rate improvement
+        
+        ---
+        *This issue was automatically created by the Test Monitoring workflow.*
+        *Success rate threshold: 80% | Current: ${stats.success_rate}%*
+            `.trim();
+        
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: issueTitle,
+              body: issueBody,
+              labels: ['testing', 'ci-cd', 'automated', 'priority-high']
+            });
+        
+            core.setOutput('issue-created', 'true');
+            core.setOutput('issue-title', issueTitle);
+          } else {
+            core.setOutput('issue-created', 'false');
+          }
+
+    - name: Update test documentation
+      run: |
+        # Create or update testing documentation
+        mkdir -p docs/testing
+        cp test-report.md docs/testing/latest-report.md
+        
+        # Create testing guide if it doesn't exist
+        if [ ! -f "docs/testing/TESTING.md" ]; then
+          cat > docs/testing/TESTING.md << 'EOF'
+        # CrystalCog Testing Guide
+        
+        This document describes the testing infrastructure and processes for the CrystalCog project.
+        
+        ## Test Organization
+        
+        ### Directory Structure
+        ```
+        spec/                    # Unit tests using Crystal's spec framework
+        ├── cogutil/            # cogutil component tests
+        ├── atomspace/          # atomspace component tests
+        ├── cogserver/          # cogserver component tests
+        └── pattern_matching/   # pattern matching tests
+        
+        benchmarks/             # Performance benchmarks
+        tests/                  # Integration tests (if any)
+        scripts/                # Test utilities
+        └── test-runner.sh     # Comprehensive test runner script
+        ```
+        
+        ### Test Types
+        
+        1. **Unit Tests** (`spec/` directory)
+           - Test individual functions and classes
+           - Use Crystal's built-in `spec` framework
+           - Run with: `crystal spec`
+        
+        2. **Integration Tests** (`examples/tests/` directory)
+           - Test component interactions
+           - Validate end-to-end functionality
+           - Run individually: `crystal run examples/tests/test_basic.cr`
+        
+        3. **Performance Benchmarks** (`benchmarks/` directory)
+           - Measure execution performance
+           - Track performance regressions
+           - Run with: `crystal run --release benchmarks/benchmark.cr`
+        
+        ## Running Tests
+        
+        ### Local Development
+        
+        Use the comprehensive test runner:
+        ```bash
+        # Run all tests
+        ./scripts/test-runner.sh --all
+        
+        # Run specific test types
+        ./scripts/test-runner.sh --unit --verbose
+        ./scripts/test-runner.sh --integration
+        ./scripts/test-runner.sh --benchmarks
+        
+        # Test specific component
+        ./scripts/test-runner.sh --component atomspace
+        ```
+        
+        ### CI/CD Pipeline
+        
+        Tests run automatically on:
+        - Push to main branch
+        - Pull requests
+        - Nightly schedule
+        - Manual workflow dispatch
+        
+        ## Test Standards
+        
+        ### Writing Tests
+        
+        1. **Unit Tests**: Follow Crystal spec conventions
+        2. **Integration Tests**: Test realistic usage scenarios
+        3. **Performance Tests**: Establish baseline metrics
+        4. **Coverage**: Aim for >80% test coverage
+        
+        ### Test Quality
+        
+        - Tests should be deterministic and repeatable
+        - Avoid external dependencies where possible
+        - Use meaningful test descriptions
+        - Clean up resources after tests
+        
+        ## Monitoring and Reporting
+        
+        The project includes automated test monitoring that:
+        - Tracks success/failure rates
+        - Generates periodic test reports
+        - Creates issues for test instability
+        - Provides performance trend analysis
+        
+        Latest test report: [latest-report.md](./latest-report.md)
+        EOF
+        fi
+
+    - name: Upload test report
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-report-${{ github.run_number }}
+        path: |
+          test-report.md
+          run-stats.json
+          docs/testing/
+        retention-days: 90
+
+    - name: Notify on issue creation
+      if: steps.check-patterns.outputs.issue-created == 'true'
+      run: |
+        echo "🚨 Test instability detected!"
+        echo "Created issue: ${{ steps.check-patterns.outputs.issue-title }}"
+        echo "Success rate: $(jq -r '.success_rate' run-stats.json)%"
+        
+    - name: Summary
+      run: |
+        echo "Test Monitoring Summary"
+        echo "======================"
+        echo "Success Rate: $(jq -r '.success_rate' run-stats.json)%"
+        echo "Recent Runs Analyzed: $(jq -r '.total' run-stats.json)"
+        echo "Report Generated: ✅"
+        
+        if [ "${{ steps.check-patterns.outputs.issue-created }}" = "true" ]; then
+          echo "Issue Created: ✅ (Test instability detected)"
+        else
+          echo "Issue Created: ➖ (Tests stable)"
+        fi
+        
+        echo ""
+        echo "Test monitoring completed successfully! 📊"

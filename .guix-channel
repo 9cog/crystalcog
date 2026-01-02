@@ -1,0 +1,8 @@
+;; This file tells 'guix pull' to use the package definitions
+;; from this repository.
+
+(dependencies
+ (channel
+  (name guix)
+  (url "https://git.savannah.gnu.org/git/guix.git")
+  (minimum-guix "1.4.0")))

@@ -1,0 +1,21 @@
+{
+    "name": "Redox OS Machine Learning Integration Environment",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "customizations": {
+        // Configure properties specific to VS Code.
+        "vscode": {
+            "settings": {},
+            "extensions": [
+                "ms-python.python"
+            ]
+        }
+    },
+    "postCreateCommand": "pip3 install -r requirements.txt && cargo install hyperon",
+    "tasks": {
+      "build": "pip3 install -r requirements.txt && cargo install hyperon"
+    }
+}
+
+

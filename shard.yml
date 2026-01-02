@@ -1,0 +1,101 @@
+name: crystalcog
+version: 0.1.0
+
+authors:
+  - OpenCog Community <opencog@googlegroups.com>
+
+crystal: 1.10.1
+
+license: AGPL-3.0
+
+description: |
+  Crystal language implementation of the OpenCog framework.
+  A complete rewrite of the OpenCog artificial intelligence system
+  in Crystal, providing better performance, memory safety, and maintainability.
+
+dependencies:
+  # Database and persistence
+  sqlite3:
+    github: crystal-lang/crystal-sqlite3
+  pg:
+    github: will/crystal-pg
+
+development_dependencies:
+
+targets:
+  crystalcog:
+    main: src/crystalcog.cr
+
+  # Core library components
+  cogutil_bin:
+    main: src/cogutil/cogutil.cr
+    
+  atomspace_bin:
+    main: src/atomspace/atomspace.cr
+    
+  opencog_bin:
+    main: src/opencog/opencog.cr
+
+  # Reasoning engines
+  pln_bin:
+    main: src/pln/pln.cr
+
+  ure_bin:
+    main: src/ure/ure.cr
+
+  # Specialized components
+  moses_bin:
+    main: src/moses/moses.cr
+
+  attention_bin:
+    main: src/attention/attention.cr
+
+  learning_bin:
+    main: src/learning/learning_main.cr
+
+  ml_bin:
+    main: src/ml/ml_main.cr
+
+  ai_integration_bin:
+    main: src/ai_integration/ai_bridge.cr
+  
+  # Pattern processing components  
+  pattern_matching:
+    main: src/pattern_matching/pattern_matching_main.cr
+    
+  pattern_mining:
+    main: src/pattern_mining/pattern_mining_main.cr
+    
+  nlp:
+    main: src/nlp/nlp_main.cr
+    
+  # Server applications
+  cogserver:
+    main: src/cogserver/cogserver_main.cr
+    
+  # Agent-Zero distributed networks
+  distributed_network_demo:
+    main: src/agent-zero/distributed_network_demo.cr
+    
+  # Spatial and temporal reasoning (Phase 6-7)
+  spatial:
+    main: src/spatial/spatial.cr
+
+  temporal:
+    main: src/temporal/temporal.cr
+
+  behavior:
+    main: src/behavior/behavior.cr
+
+  # Command line tools
+  cogshell:
+    main: src/tools/cogshell.cr
+
+  profiler:
+    main: tools/profiler.cr
+
+scripts:
+  build: crystal build src/crystalcog.cr
+  test: crystal spec
+  docs: crystal docs
+  benchmark: crystal run --release benchmarks/benchmark.cr

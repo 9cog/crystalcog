@@ -1,0 +1,265 @@
+version: '3.8'
+
+services:
+  # OpenCog Central Monorepo Build Service
+  opencog-monorepo:
+    build:
+      context: .
+      dockerfile: Dockerfile.monorepo
+    container_name: opencog-monorepo
+    volumes:
+      # Mount source code
+      - .:/workspace
+      # Mount ccache for faster builds
+      - ccache:/workspace/.ccache
+      # Mount build artifacts
+      - build-artifacts:/workspace/build
+      # Mount Python virtual environment
+      - python-venv:/workspace/venv
+      # Mount Node.js modules
+      - node-modules:/workspace/node_modules
+      # Mount Rust target
+      - rust-target:/workspace/target
+      # Mount cargo registry
+      - cargo-registry:/home/opencog/.cargo/registry
+      # Mount stack work
+      - stack-work:/workspace/.stack-work
+    environment:
+      - BUILD_TYPE=${BUILD_TYPE:-Release}
+      - JOBS=${JOBS:-$(nproc)}
+      - INSTALL_PREFIX=${INSTALL_PREFIX:-/usr/local}
+      - BUILD_DIR=${BUILD_DIR:-/workspace/build}
+      - SKIP_TESTS=${SKIP_TESTS:-false}
+      - SKIP_INSTALL=${SKIP_INSTALL:-false}
+      - CLEAN_BUILD=${CLEAN_BUILD:-false}
+      - CCACHE_DIR=/workspace/.ccache
+      - MAKEFLAGS=-j${JOBS:-$(nproc)}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - opencog-network
+    profiles:
+      - build
+      - dev
+
+  # PostgreSQL Database (for testing)
+  postgres:
+    image: postgres:13
+    container_name: opencog-postgres
+    environment:
+      POSTGRES_USER: opencog_test
+      POSTGRES_PASSWORD: cheese
+      POSTGRES_DB: opencog_test
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - opencog-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opencog_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache (for some components)
+  redis:
+    image: redis:7-alpine
+    container_name: opencog-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - opencog-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Neo4j Database (for graph components)
+  neo4j:
+    image: neo4j:4.4
+    container_name: opencog-neo4j
+    environment:
+      NEO4J_AUTH: neo4j/password
+      NEO4J_apoc_export_file_enabled: "true"
+      NEO4J_apoc_import_file_enabled: "true"
+      NEO4J_apoc_import_file_use__neo4j__config: "true"
+      NEO4J_PLUGINS: '["apoc"]'
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+      - neo4j-import:/var/lib/neo4j/import
+      - neo4j-plugins:/plugins
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    networks:
+      - opencog-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7474"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # MongoDB (for some components)
+  mongodb:
+    image: mongo:5
+    container_name: opencog-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: opencog
+      MONGO_INITDB_ROOT_PASSWORD: password
+    volumes:
+      - mongodb-data:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      - opencog-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Development Environment
+  dev-env:
+    build:
+      context: .
+      dockerfile: Dockerfile.monorepo
+    container_name: opencog-dev
+    volumes:
+      - .:/workspace
+      - ccache:/workspace/.ccache
+      - build-artifacts:/workspace/build
+      - python-venv:/workspace/venv
+      - node-modules:/workspace/node_modules
+      - rust-target:/workspace/target
+      - cargo-registry:/home/opencog/.cargo/registry
+      - stack-work:/workspace/.stack-work
+    environment:
+      - BUILD_TYPE=Debug
+      - JOBS=${JOBS:-$(nproc)}
+      - INSTALL_PREFIX=/usr/local
+      - BUILD_DIR=/workspace/build
+      - SKIP_TESTS=false
+      - SKIP_INSTALL=false
+      - CLEAN_BUILD=false
+      - CCACHE_DIR=/workspace/.ccache
+      - MAKEFLAGS=-j${JOBS:-$(nproc)}
+    depends_on:
+      - postgres
+      - redis
+      - neo4j
+      - mongodb
+    networks:
+      - opencog-network
+    ports:
+      - "3000:3000"  # For web interfaces
+      - "17001:17001"  # CogServer port
+    stdin_open: true
+    tty: true
+    profiles:
+      - dev
+
+  # Testing Environment
+  test-env:
+    build:
+      context: .
+      dockerfile: Dockerfile.monorepo
+    container_name: opencog-test
+    volumes:
+      - .:/workspace
+      - ccache:/workspace/.ccache
+      - build-artifacts:/workspace/build
+      - python-venv:/workspace/venv
+      - node-modules:/workspace/node_modules
+      - rust-target:/workspace/target
+      - cargo-registry:/home/opencog/.cargo/registry
+      - stack-work:/workspace/.stack-work
+    environment:
+      - BUILD_TYPE=Release
+      - JOBS=${JOBS:-$(nproc)}
+      - INSTALL_PREFIX=/usr/local
+      - BUILD_DIR=/workspace/build
+      - SKIP_TESTS=false
+      - SKIP_INSTALL=false
+      - CLEAN_BUILD=false
+      - CCACHE_DIR=/workspace/.ccache
+      - MAKEFLAGS=-j${JOBS:-$(nproc)}
+    depends_on:
+      - postgres
+      - redis
+      - neo4j
+      - mongodb
+    networks:
+      - opencog-network
+    profiles:
+      - test
+
+  # Documentation Generation
+  docs:
+    build:
+      context: .
+      dockerfile: Dockerfile.monorepo
+    container_name: opencog-docs
+    volumes:
+      - .:/workspace
+      - ccache:/workspace/.ccache
+      - build-artifacts:/workspace/build
+      - python-venv:/workspace/venv
+      - node-modules:/workspace/node_modules
+      - rust-target:/workspace/target
+      - cargo-registry:/home/opencog/.cargo/registry
+      - stack-work:/workspace/.stack-work
+    environment:
+      - BUILD_TYPE=Release
+      - JOBS=${JOBS:-$(nproc)}
+      - INSTALL_PREFIX=/usr/local
+      - BUILD_DIR=/workspace/build
+      - SKIP_TESTS=true
+      - SKIP_INSTALL=false
+      - CLEAN_BUILD=false
+      - CCACHE_DIR=/workspace/.ccache
+      - MAKEFLAGS=-j${JOBS:-$(nproc)}
+    command: ["make", "doc"]
+    networks:
+      - opencog-network
+    profiles:
+      - docs
+
+volumes:
+  ccache:
+    driver: local
+  build-artifacts:
+    driver: local
+  python-venv:
+    driver: local
+  node-modules:
+    driver: local
+  rust-target:
+    driver: local
+  cargo-registry:
+    driver: local
+  stack-work:
+    driver: local
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  neo4j-data:
+    driver: local
+  neo4j-logs:
+    driver: local
+  neo4j-import:
+    driver: local
+  neo4j-plugins:
+    driver: local
+  mongodb-data:
+    driver: local
+
+networks:
+  opencog-network:
+    driver: bridge

@@ -1,0 +1,87 @@
+name: Reusable Build Component Workflow
+
+on:
+  workflow_call:
+    inputs:
+      component-name:
+        description: 'Name of the component to build'
+        required: true
+        type: string
+      repository:
+        description: 'Repository to checkout (e.g., opencog/atomspace)'
+        required: true
+        type: string
+      dependencies:
+        description: 'Comma-separated list of artifact names to download as dependencies'
+        required: false
+        type: string
+        default: ''
+      cmake-args:
+        description: 'Additional CMake arguments'
+        required: false
+        type: string
+        default: ''
+      upload-artifacts:
+        description: 'Whether to upload build artifacts'
+        required: false
+        type: boolean
+        default: true
+      artifact-paths:
+        description: 'Paths to include in artifacts (newline-separated)'
+        required: false
+        type: string
+        default: |
+          /usr/local/lib/lib*
+          /usr/local/include/
+
+jobs:
+  build:
+    name: Build ${{ inputs.component-name }}
+    runs-on: ubuntu-latest
+    container:
+      image: opencog/opencog-deps
+      options: --user root
+    
+    steps:
+      - name: Download dependencies
+        if: inputs.dependencies != ''
+        uses: actions/download-artifact@v4
+        with:
+          path: /usr/local/
+      
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repository }}
+          path: ${{ inputs.component-name }}
+      
+      - name: Configure CMake
+        run: |
+          cd ${{ inputs.component-name }}
+          mkdir -p build
+          cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release ${{ inputs.cmake-args }}
+      
+      - name: Build
+        run: |
+          cd ${{ inputs.component-name }}/build
+          make -j$(nproc)
+      
+      - name: Run Tests
+        run: |
+          cd ${{ inputs.component-name }}/build
+          make test ARGS="-V" || true
+        continue-on-error: true
+      
+      - name: Install
+        run: |
+          cd ${{ inputs.component-name }}/build
+          make install
+      
+      - name: Upload artifacts
+        if: inputs.upload-artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.component-name }}-artifacts
+          path: ${{ inputs.artifact-paths }}
+          retention-days: 1

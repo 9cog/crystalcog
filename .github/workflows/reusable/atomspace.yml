@@ -1,0 +1,98 @@
+# .github/workflows/reusable/atomspace.yml
+
+name: Reusable AtomSpace Workflow
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        required: true
+        type: string
+    secrets:
+      GITHUB_TOKEN:
+        required: true
+
+jobs:
+  atomspace_job:
+    name: AtomSpace Job
+    runs-on: ubuntu-latest
+    container:
+      image: opencog/opencog-deps
+      options: --user root
+    services:
+      postgres:
+        image: opencog/postgres
+        env:
+          POSTGRES_DB: atomspace
+          POSTGRES_USER: opencog_test
+          POSTGRES_PASSWORD: cheese
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U opencog_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      PGHOST: localhost
+      PGUSER: opencog_test
+      PGPASSWORD: cheese
+      CCACHE_DIR: /ws/ccache
+      MAKEFLAGS: -j2
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: Start restoring ccache
+        run: date +%d-%m-%Y > /tmp/date
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: /ws/ccache
+          key: ccache-${{ hashFiles('/tmp/date') }}
+          restore-keys: |
+            ccache-
+
+      - name: Set number of make jobs
+        run: echo "MAKEFLAGS=-j2" >> $GITHUB_ENV
+
+      - name: CMake Configure
+        run: |
+          mkdir build
+          cd build
+          cmake ../../orch-atomspace/atomspace
+
+      - name: Build
+        run: |
+          cd build
+          make
+
+      - name: Build tests
+        run: |
+          cd build
+          make tests
+
+      - name: Run tests
+        run: |
+          cd build
+          make check ARGS="$MAKEFLAGS"
+
+      - name: Print test log
+        if: always()
+        run: |
+          cat build/tests/Testing/Temporary/LastTest.log
+
+      - name: Upload atomspace artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: atomspace
+          path: /ws/atomspace
+
+      - name: Upload ccache artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ccache
+          path: /ws/ccache

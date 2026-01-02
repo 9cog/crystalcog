@@ -1,0 +1,47 @@
+name: Crystal CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    container:
+      image: crystallang/crystal
+      options: --memory=4g --cpus=2
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install system dependencies
+      run: |
+        apt-get update
+        apt-get install -y libsqlite3-dev librocksdb-dev libevent-dev libssl-dev || true
+    
+    - name: Install dependencies
+      run: shards install
+    
+    - name: Run tests with error handling
+      run: |
+        echo "Running Crystal specs..."
+        
+        # Try normal execution first
+        if crystal spec --error-trace --no-color 2>&1 | tee test_output.log; then
+          echo "✓ Tests passed"
+          exit 0
+        fi
+        
+        # Check if it was a compiler crash
+        if grep -q "BUG: a codegen process failed" test_output.log || grep -q "Invalid memory access" test_output.log; then
+          echo "⚠️  Compiler crash detected, retrying with single-threaded execution..."
+          CRYSTAL_WORKERS=1 crystal spec --error-trace --no-color
+        else
+          echo "✗ Tests failed"
+          cat test_output.log
+          exit 1
+        fi
+      continue-on-error: false

@@ -1,0 +1,118 @@
+# Crystal Testing Configuration
+# This file defines testing standards and configurations for the CrystalCog project
+
+testing:
+  # Test organization
+  directories:
+    unit_tests: "spec/"
+    integration_tests: "tests/"
+    benchmark_tests: "benchmarks/"
+    
+  # Testing standards
+  coverage:
+    minimum_threshold: 80
+    report_format: "text"
+    exclude_patterns:
+      - "spec/**"
+      - "benchmarks/**"
+      - "**/*_spec.cr"
+      
+  # Test execution settings
+  execution:
+    parallel: true
+    verbose: true
+    fail_fast: false
+    timeout: 300 # seconds
+    
+  # Component-specific test configuration
+  components:
+    cogutil:
+      priority: "high"
+      test_files:
+        - "spec/cogutil/logger_spec.cr"
+        - "spec/cogutil/config_spec.cr"
+        - "spec/cogutil/randgen_spec.cr"
+      integration_tests:
+        - "test_basic.cr"
+        
+    atomspace:
+      priority: "critical" 
+      test_files:
+        - "spec/atomspace/atom_spec.cr"
+        - "spec/atomspace/atomspace_spec.cr"
+        - "spec/atomspace/truthvalue_spec.cr"
+      integration_tests:
+        - "test_basic.cr"
+        - "test_pattern_matching.cr"
+        
+    pln:
+      priority: "high"
+      test_files: []
+      integration_tests:
+        - "test_pln.cr"
+        
+    cogserver:
+      priority: "medium"
+      test_files:
+        - "spec/cogserver/cogserver_spec.cr"
+      integration_tests:
+        - "test_cogserver_api.cr"
+        
+    pattern_matching:
+      priority: "high"
+      test_files:
+        - "spec/pattern_matching/pattern_matching_spec.cr"
+      integration_tests:
+        - "test_pattern_matching.cr"
+
+# Performance benchmarks configuration        
+benchmarks:
+  enabled: true
+  components:
+    - "atomspace"
+    - "cogutil"
+    - "pattern_matching"
+  metrics:
+    - "operations_per_second"
+    - "memory_usage"
+    - "startup_time"
+    
+# Continuous Integration settings
+ci:
+  triggers:
+    - "push_to_main"
+    - "pull_request"
+    - "nightly_schedule"
+  
+  platforms:
+    - "ubuntu-latest"
+    - "ubuntu-20.04"
+    - "macos-latest"
+    
+  crystal_versions:
+    - "1.10.1"
+    - "1.9.2"  
+    - "nightly"
+    
+  matrix_strategy:
+    fail_fast: false
+    exclude_combinations:
+      - platform: "macos-latest"
+        crystal_version: "1.9.2"
+      - platform: "ubuntu-20.04" 
+        crystal_version: "nightly"
+
+# Quality gates
+quality:
+  gates:
+    build_success: "required"
+    unit_tests_pass: "required"
+    integration_tests_pass: "required" 
+    code_format_check: "warning"
+    security_scan: "warning"
+    performance_regression: "warning"
+    
+  thresholds:
+    test_coverage: 80
+    build_time: 600 # seconds
+    test_time: 300 # seconds
