@@ -64,12 +64,12 @@ jobs:
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y libsqlite3-dev libevent-dev libssl-dev libgmp-dev libyaml-dev libpcre2-dev
+        sudo apt-get install -y libsqlite3-dev libevent-dev libssl-dev libgmp-dev libyaml-dev libpcre2-dev librocksdb-dev
 
     - name: Install system dependencies (macOS)
       if: runner.os == 'macOS'
       run: |
-        brew install sqlite3 libevent openssl gmp libyaml pcre2
+        brew install sqlite3 libevent openssl gmp libyaml pcre2 rocksdb
 
     - name: Install dependencies
       run: shards install
@@ -112,7 +112,8 @@ jobs:
           libssl-dev \
           libgmp-dev \
           libyaml-dev \
-          libpcre2-dev
+          libpcre2-dev \
+          librocksdb-dev
 
     - name: Install dependencies
       run: shards install
@@ -234,7 +235,8 @@ jobs:
           libssl-dev \
           libgmp-dev \
           libyaml-dev \
-          libpcre2-dev
+          libpcre2-dev \
+          librocksdb-dev
 
     - name: Install dependencies
       run: shards install
@@ -297,7 +299,7 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libsqlite3-dev libevent-dev libssl-dev libgmp-dev libyaml-dev libpcre2-dev
+        sudo apt-get install -y libsqlite3-dev libevent-dev libssl-dev libgmp-dev libyaml-dev libpcre2-dev librocksdb-dev
 
     - name: Install dependencies
       run: shards install
@@ -336,7 +338,7 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libsqlite3-dev libevent-dev libssl-dev libgmp-dev libyaml-dev libpcre2-dev
+        sudo apt-get install -y libsqlite3-dev libevent-dev libssl-dev libgmp-dev libyaml-dev libpcre2-dev librocksdb-dev
 
     - name: Install dependencies
       run: shards install
