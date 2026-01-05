@@ -50,8 +50,7 @@ module PygmalionAgent
     property atomspace : AtomSpace::AtomSpace?
     property conversation_history : Array(Hash(String, String))
     
-    def initialize(@config : Config, @echo_config : EchoStateConfig? = nil)
-      @echo_config ||= EchoStateConfig.new
+    def initialize(@config : Config, @echo_config : EchoStateConfig = EchoStateConfig.new)
       @atomspace = nil
       @conversation_history = [] of Hash(String, String)
     end
