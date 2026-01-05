@@ -15,15 +15,23 @@
 # - Streaming responses
 # - Token counting and context management
 # - Character/persona formatting
+# - Multimodal support (vision/images)
+# - Tool/function calling
+# - Speculative decoding
+# - Embeddings API
+# - Tokenization API
+# - Prompt caching
+# - Request priority scheduling
 
 require "http/client"
 require "json"
 require "uri"
+require "base64"
 require "../cogutil/logger"
 require "../atomspace/atomspace"
 
 module PygmalionAgent
-  VERSION = "0.2.0"
+  VERSION = "0.3.0"
 
   # ==========================================================================
   # Sampling Configuration
@@ -71,6 +79,21 @@ module PygmalionAgent
     property smoothing_factor : Float64
     property smoothing_curve : Float64
 
+    # Additional parameters (NEW)
+    property seed : Int64?                    # Reproducibility seed
+    property best_of : Int32                  # Beam search / best_of
+    property length_penalty : Float64         # Length penalty for beam search
+    property early_stopping : Bool            # Early stopping for beam search
+    property skip_special_tokens : Bool       # Skip special tokens in output
+    property spaces_between_special_tokens : Bool  # Add spaces between special tokens
+    property include_stop_str_in_output : Bool     # Include stop string in output
+    property ignore_eos : Bool                # Ignore end-of-sequence token
+    property logit_bias : Hash(Int32, Float64)     # Token ID -> bias
+
+    # NSFW/Content filtering
+    property nsfw_allowed : Bool
+    property profanity_filter : Bool
+
     def initialize(
       @temperature = 0.7,
       @top_k = 40,
@@ -97,7 +120,18 @@ module PygmalionAgent
       @dynatemp_max = 1.5,
       @dynatemp_exponent = 1.0,
       @smoothing_factor = 0.0,
-      @smoothing_curve = 1.0
+      @smoothing_curve = 1.0,
+      @seed = nil,
+      @best_of = 1,
+      @length_penalty = 1.0,
+      @early_stopping = false,
+      @skip_special_tokens = true,
+      @spaces_between_special_tokens = true,
+      @include_stop_str_in_output = false,
+      @ignore_eos = false,
+      @logit_bias = {} of Int32 => Float64,
+      @nsfw_allowed = true,
+      @profanity_filter = false
     )
     end
 
@@ -148,6 +182,25 @@ module PygmalionAgent
       )
     end
 
+    # Preset: Deterministic (for testing)
+    def self.deterministic(seed : Int64 = 42) : SamplingConfig
+      new(
+        temperature: 0.0,
+        top_k: 1,
+        seed: seed
+      )
+    end
+
+    # Preset: Beam search
+    def self.beam_search(num_beams : Int32 = 4) : SamplingConfig
+      new(
+        temperature: 0.0,
+        best_of: num_beams,
+        length_penalty: 1.0,
+        early_stopping: true
+      )
+    end
+
     def to_api_params : Hash(String, JSON::Any)
       params = {} of String => JSON::Any
 
@@ -185,6 +238,31 @@ module PygmalionAgent
         params["dynatemp_min"] = JSON::Any.new(@dynatemp_min)
         params["dynatemp_max"] = JSON::Any.new(@dynatemp_max)
         params["dynatemp_exponent"] = JSON::Any.new(@dynatemp_exponent)
+      end
+
+      # Additional parameters
+      if s = @seed
+        params["seed"] = JSON::Any.new(s)
+      end
+
+      if @best_of > 1
+        params["best_of"] = JSON::Any.new(@best_of.to_i64)
+        params["length_penalty"] = JSON::Any.new(@length_penalty)
+        params["early_stopping"] = JSON::Any.new(@early_stopping)
+      end
+
+      params["skip_special_tokens"] = JSON::Any.new(@skip_special_tokens)
+      params["spaces_between_special_tokens"] = JSON::Any.new(@spaces_between_special_tokens)
+      params["include_stop_str_in_output"] = JSON::Any.new(@include_stop_str_in_output)
+
+      if @ignore_eos
+        params["ignore_eos"] = JSON::Any.new(true)
+      end
+
+      unless @logit_bias.empty?
+        bias_obj = {} of String => JSON::Any
+        @logit_bias.each { |k, v| bias_obj[k.to_s] = JSON::Any.new(v) }
+        params["logit_bias"] = JSON::Any.new(bias_obj)
       end
 
       params
@@ -238,7 +316,8 @@ module PygmalionAgent
       headers
     end
 
-    def completions_endpoint : String
+    # Endpoint URLs
+    def chat_completions_endpoint : String
       case @api_type
       when .open_ai?, .aphrodite?
         "#{@base_url}/v1/chat/completions"
@@ -249,12 +328,505 @@ module PygmalionAgent
       end
     end
 
+    def completions_endpoint : String
+      "#{@base_url}/v1/completions"
+    end
+
     def models_endpoint : String
       "#{@base_url}/v1/models"
     end
 
     def lora_endpoint : String
       "#{@base_url}/v1/lora"
+    end
+
+    def embeddings_endpoint : String
+      "#{@base_url}/v1/embeddings"
+    end
+
+    def tokenize_endpoint : String
+      "#{@base_url}/v1/tokenize"
+    end
+
+    def detokenize_endpoint : String
+      "#{@base_url}/v1/detokenize"
+    end
+
+    def health_endpoint : String
+      "#{@base_url}/health"
+    end
+
+    def version_endpoint : String
+      "#{@base_url}/version"
+    end
+
+    # Legacy alias
+    def completions_endpoint_legacy : String
+      chat_completions_endpoint
+    end
+  end
+
+  # ==========================================================================
+  # Multimodal Support (NEW)
+  # ==========================================================================
+
+  # Image content for multimodal models
+  class ImageContent
+    property type : ImageType
+    property data : String  # Base64 or URL
+    property detail : ImageDetail
+
+    enum ImageType
+      Base64
+      URL
+    end
+
+    enum ImageDetail
+      Auto
+      Low
+      High
+    end
+
+    def initialize(@type : ImageType, @data : String, @detail : ImageDetail = ImageDetail::Auto)
+    end
+
+    # Create from file path
+    def self.from_file(path : String, detail : ImageDetail = ImageDetail::Auto) : ImageContent
+      content = File.read(path)
+      encoded = Base64.strict_encode(content)
+      mime_type = detect_mime_type(path)
+      new(ImageType::Base64, "data:#{mime_type};base64,#{encoded}", detail)
+    end
+
+    # Create from URL
+    def self.from_url(url : String, detail : ImageDetail = ImageDetail::Auto) : ImageContent
+      new(ImageType::URL, url, detail)
+    end
+
+    # Create from raw bytes
+    def self.from_bytes(bytes : Bytes, mime_type : String = "image/png", detail : ImageDetail = ImageDetail::Auto) : ImageContent
+      encoded = Base64.strict_encode(bytes)
+      new(ImageType::Base64, "data:#{mime_type};base64,#{encoded}", detail)
+    end
+
+    private def self.detect_mime_type(path : String) : String
+      ext = File.extname(path).downcase
+      case ext
+      when ".jpg", ".jpeg" then "image/jpeg"
+      when ".png"          then "image/png"
+      when ".gif"          then "image/gif"
+      when ".webp"         then "image/webp"
+      when ".bmp"          then "image/bmp"
+      else                      "image/png"
+      end
+    end
+
+    def to_json(json : JSON::Builder)
+      json.object do
+        json.field "type", "image_url"
+        json.field "image_url" do
+          json.object do
+            json.field "url", @data
+            json.field "detail", @detail.to_s.downcase
+          end
+        end
+      end
+    end
+  end
+
+  # Multimodal message content (text + images)
+  class MultimodalContent
+    property parts : Array(ContentPart)
+
+    def initialize
+      @parts = [] of ContentPart
+    end
+
+    def add_text(text : String)
+      @parts << ContentPart.new(:text, text)
+    end
+
+    def add_image(image : ImageContent)
+      @parts << ContentPart.new(:image, image)
+    end
+
+    def add_image_url(url : String, detail : ImageContent::ImageDetail = ImageContent::ImageDetail::Auto)
+      @parts << ContentPart.new(:image, ImageContent.from_url(url, detail))
+    end
+
+    def add_image_file(path : String, detail : ImageContent::ImageDetail = ImageContent::ImageDetail::Auto)
+      @parts << ContentPart.new(:image, ImageContent.from_file(path, detail))
+    end
+
+    def to_json(json : JSON::Builder)
+      json.array do
+        @parts.each do |part|
+          case part.type
+          when :text
+            json.object do
+              json.field "type", "text"
+              json.field "text", part.text_content.not_nil!
+            end
+          when :image
+            part.image_content.not_nil!.to_json(json)
+          end
+        end
+      end
+    end
+  end
+
+  struct ContentPart
+    property type : Symbol
+    property text_content : String?
+    property image_content : ImageContent?
+
+    def initialize(@type : Symbol, content : String | ImageContent)
+      case content
+      when String
+        @text_content = content
+        @image_content = nil
+      when ImageContent
+        @text_content = nil
+        @image_content = content
+      end
+    end
+  end
+
+  # ==========================================================================
+  # Tool/Function Calling (NEW)
+  # ==========================================================================
+
+  # Function/Tool definition
+  class ToolDefinition
+    property name : String
+    property description : String
+    property parameters : ToolParameters
+    property strict : Bool
+
+    def initialize(
+      @name : String,
+      @description : String,
+      @parameters : ToolParameters = ToolParameters.new,
+      @strict : Bool = false
+    )
+    end
+
+    def to_json(json : JSON::Builder)
+      json.object do
+        json.field "type", "function"
+        json.field "function" do
+          json.object do
+            json.field "name", @name
+            json.field "description", @description
+            json.field "strict", @strict
+            json.field "parameters" do
+              @parameters.to_json(json)
+            end
+          end
+        end
+      end
+    end
+  end
+
+  # Tool parameters (JSON Schema)
+  class ToolParameters
+    property type : String
+    property properties : Hash(String, ParameterProperty)
+    property required : Array(String)
+    property additional_properties : Bool
+
+    def initialize(
+      @type : String = "object",
+      @properties : Hash(String, ParameterProperty) = {} of String => ParameterProperty,
+      @required : Array(String) = [] of String,
+      @additional_properties : Bool = false
+    )
+    end
+
+    def add_property(name : String, prop : ParameterProperty, required : Bool = false)
+      @properties[name] = prop
+      @required << name if required && !@required.includes?(name)
+    end
+
+    def add_string(name : String, description : String, required : Bool = false, enum_values : Array(String)? = nil)
+      add_property(name, ParameterProperty.string(description, enum_values), required)
+    end
+
+    def add_number(name : String, description : String, required : Bool = false)
+      add_property(name, ParameterProperty.number(description), required)
+    end
+
+    def add_integer(name : String, description : String, required : Bool = false)
+      add_property(name, ParameterProperty.integer(description), required)
+    end
+
+    def add_boolean(name : String, description : String, required : Bool = false)
+      add_property(name, ParameterProperty.boolean(description), required)
+    end
+
+    def add_array(name : String, description : String, item_type : String, required : Bool = false)
+      add_property(name, ParameterProperty.array(description, item_type), required)
+    end
+
+    def to_json(json : JSON::Builder)
+      json.object do
+        json.field "type", @type
+        json.field "properties" do
+          json.object do
+            @properties.each do |name, prop|
+              json.field name do
+                prop.to_json(json)
+              end
+            end
+          end
+        end
+        unless @required.empty?
+          json.field "required" do
+            json.array do
+              @required.each { |r| json.string(r) }
+            end
+          end
+        end
+        json.field "additionalProperties", @additional_properties
+      end
+    end
+  end
+
+  struct ParameterProperty
+    property type : String
+    property description : String
+    property enum_values : Array(String)?
+    property items : Hash(String, String)?
+
+    def initialize(@type, @description, @enum_values = nil, @items = nil)
+    end
+
+    def self.string(description : String, enum_values : Array(String)? = nil) : ParameterProperty
+      new("string", description, enum_values)
+    end
+
+    def self.number(description : String) : ParameterProperty
+      new("number", description)
+    end
+
+    def self.integer(description : String) : ParameterProperty
+      new("integer", description)
+    end
+
+    def self.boolean(description : String) : ParameterProperty
+      new("boolean", description)
+    end
+
+    def self.array(description : String, item_type : String) : ParameterProperty
+      new("array", description, items: {"type" => item_type})
+    end
+
+    def to_json(json : JSON::Builder)
+      json.object do
+        json.field "type", @type
+        json.field "description", @description
+        if ev = @enum_values
+          json.field "enum" do
+            json.array { ev.each { |v| json.string(v) } }
+          end
+        end
+        if it = @items
+          json.field "items" do
+            json.object do
+              it.each { |k, v| json.field k, v }
+            end
+          end
+        end
+      end
+    end
+  end
+
+  # Tool call from model response
+  struct ToolCall
+    property id : String
+    property type : String
+    property function_name : String
+    property function_arguments : String
+
+    def initialize(@id, @type, @function_name, @function_arguments)
+    end
+
+    def self.from_json(json : JSON::Any) : ToolCall
+      func = json["function"]
+      new(
+        json["id"].as_s,
+        json["type"]?.try(&.as_s) || "function",
+        func["name"].as_s,
+        func["arguments"].as_s
+      )
+    end
+
+    def parsed_arguments : JSON::Any
+      JSON.parse(@function_arguments)
+    end
+  end
+
+  # Tool choice configuration
+  class ToolChoice
+    property mode : ToolChoiceMode
+    property function_name : String?
+
+    enum ToolChoiceMode
+      Auto     # Let model decide
+      None     # Don't use tools
+      Required # Must use a tool
+      Specific # Use specific tool
+    end
+
+    def initialize(@mode : ToolChoiceMode = ToolChoiceMode::Auto, @function_name : String? = nil)
+    end
+
+    def self.auto : ToolChoice
+      new(ToolChoiceMode::Auto)
+    end
+
+    def self.none : ToolChoice
+      new(ToolChoiceMode::None)
+    end
+
+    def self.required : ToolChoice
+      new(ToolChoiceMode::Required)
+    end
+
+    def self.function(name : String) : ToolChoice
+      new(ToolChoiceMode::Specific, name)
+    end
+
+    def to_json_value : JSON::Any
+      case @mode
+      when .auto?
+        JSON::Any.new("auto")
+      when .none?
+        JSON::Any.new("none")
+      when .required?
+        JSON::Any.new("required")
+      when .specific?
+        obj = {} of String => JSON::Any
+        obj["type"] = JSON::Any.new("function")
+        func = {} of String => JSON::Any
+        func["name"] = JSON::Any.new(@function_name.not_nil!)
+        obj["function"] = JSON::Any.new(func)
+        JSON::Any.new(obj)
+      else
+        JSON::Any.new("auto")
+      end
+    end
+  end
+
+  # Tool configuration
+  class ToolConfig
+    property tools : Array(ToolDefinition)
+    property tool_choice : ToolChoice
+    property parallel_tool_calls : Bool
+
+    def initialize(
+      @tools = [] of ToolDefinition,
+      @tool_choice = ToolChoice.auto,
+      @parallel_tool_calls = true
+    )
+    end
+
+    def add_tool(tool : ToolDefinition)
+      @tools << tool
+    end
+
+    def add_function(name : String, description : String, &block : ToolParameters -> Nil)
+      params = ToolParameters.new
+      yield params
+      @tools << ToolDefinition.new(name, description, params)
+    end
+
+    def enabled? : Bool
+      !@tools.empty?
+    end
+  end
+
+  # ==========================================================================
+  # Speculative Decoding (NEW)
+  # ==========================================================================
+
+  # Speculative decoding configuration
+  class SpeculativeDecodingConfig
+    property enabled : Bool
+    property draft_model : String?
+    property num_speculative_tokens : Int32
+    property draft_model_quantization : String?
+    property speculative_disable_by_batch_size : Int32?
+    property ngram_prompt_lookup_max : Int32?
+    property ngram_prompt_lookup_min : Int32?
+
+    def initialize(
+      @enabled = false,
+      @draft_model = nil,
+      @num_speculative_tokens = 5,
+      @draft_model_quantization = nil,
+      @speculative_disable_by_batch_size = nil,
+      @ngram_prompt_lookup_max = nil,
+      @ngram_prompt_lookup_min = nil
+    )
+    end
+
+    # Enable with draft model
+    def self.with_draft_model(draft_model : String, num_tokens : Int32 = 5) : SpeculativeDecodingConfig
+      new(
+        enabled: true,
+        draft_model: draft_model,
+        num_speculative_tokens: num_tokens
+      )
+    end
+
+    # Enable with n-gram lookup
+    def self.ngram_lookup(max : Int32 = 4, min : Int32 = 1) : SpeculativeDecodingConfig
+      new(
+        enabled: true,
+        ngram_prompt_lookup_max: max,
+        ngram_prompt_lookup_min: min
+      )
+    end
+  end
+
+  # ==========================================================================
+  # Caching Configuration (NEW)
+  # ==========================================================================
+
+  # Prompt/Prefix caching configuration
+  class CachingConfig
+    property enable_prefix_caching : Bool
+    property enable_chunked_prefill : Bool
+    property max_num_batched_tokens : Int32?
+    property max_num_seqs : Int32?
+
+    def initialize(
+      @enable_prefix_caching = false,
+      @enable_chunked_prefill = false,
+      @max_num_batched_tokens = nil,
+      @max_num_seqs = nil
+    )
+    end
+
+    def self.enabled : CachingConfig
+      new(enable_prefix_caching: true, enable_chunked_prefill: true)
+    end
+  end
+
+  # ==========================================================================
+  # Request Priority (NEW)
+  # ==========================================================================
+
+  # Request priority for scheduling
+  enum RequestPriority
+    Low      = 0
+    Normal   = 1
+    High     = 2
+    Critical = 3
+
+    def to_api_value : Int32
+      self.value
     end
   end
 
@@ -397,7 +969,10 @@ module PygmalionAgent
       "the air was thick", "thick with tension",
       "dance of", "danced across", "danced in",
       "sanctuary", "testament to",
-      "heart pounding", "heart racing", "pulse quickened"
+      "heart pounding", "heart racing", "pulse quickened",
+      "let out a breath", "breath I didn't know",
+      "kaleidoscope of", "symphony of", "tapestry of",
+      "oh god", "oh my god"
     ]
 
     def initialize(
@@ -546,24 +1121,59 @@ module PygmalionAgent
   end
 
   # ==========================================================================
-  # Generation Request/Response
+  # Chat Message (Enhanced with Multimodal + Tools)
   # ==========================================================================
 
-  # Chat message structure
-  struct ChatMessage
+  # Chat message structure (enhanced)
+  class ChatMessage
     property role : String
-    property content : String
+    property content : String | MultimodalContent
     property name : String?
+    property tool_calls : Array(ToolCall)?
+    property tool_call_id : String?
 
-    def initialize(@role, @content, @name = nil)
+    def initialize(@role : String, @content : String | MultimodalContent, @name : String? = nil,
+                   @tool_calls : Array(ToolCall)? = nil, @tool_call_id : String? = nil)
     end
 
     def to_json(json : JSON::Builder)
       json.object do
         json.field "role", @role
-        json.field "content", @content
+
+        case c = @content
+        when String
+          json.field "content", c
+        when MultimodalContent
+          json.field "content" do
+            c.to_json(json)
+          end
+        end
+
         if n = @name
           json.field "name", n
+        end
+
+        if tc = @tool_calls
+          json.field "tool_calls" do
+            json.array do
+              tc.each do |call|
+                json.object do
+                  json.field "id", call.id
+                  json.field "type", call.type
+                  json.field "function" do
+                    json.object do
+                      json.field "name", call.function_name
+                      json.field "arguments", call.function_arguments
+                    end
+                  end
+                end
+              end
+            end
+          end
+        end
+
+        if tcid = @tool_call_id
+          json.field "tool_call_id", tcid
         end
       end
     end
@@ -576,12 +1186,42 @@ module PygmalionAgent
       new("user", content, name)
     end
 
+    def self.user_multimodal(content : MultimodalContent, name : String? = nil) : ChatMessage
+      new("user", content, name)
+    end
+
     def self.assistant(content : String, name : String? = nil) : ChatMessage
       new("assistant", content, name)
     end
+
+    def self.assistant_with_tool_calls(tool_calls : Array(ToolCall)) : ChatMessage
+      msg = new("assistant", "")
+      msg.tool_calls = tool_calls
+      msg
+    end
+
+    def self.tool_response(tool_call_id : String, content : String) : ChatMessage
+      new("tool", content, tool_call_id: tool_call_id)
+    end
+
+    # Get text content (for backward compatibility)
+    def text_content : String
+      case c = @content
+      when String
+        c
+      when MultimodalContent
+        c.parts.select { |p| p.type == :text }.map { |p| p.text_content || "" }.join
+      else
+        ""
+      end
+    end
   end
 
-  # Generation request
+  # ==========================================================================
+  # Generation Request (Enhanced)
+  # ==========================================================================
+
+  # Generation request (enhanced with all features)
   class GenerationRequest
     property messages : Array(ChatMessage)
     property model : String?
@@ -590,13 +1230,20 @@ module PygmalionAgent
     property stream : Bool
     property logprobs : Bool
     property top_logprobs : Int32?
-    property n : Int32  # Number of completions
+    property n : Int32
     property user : String?
+    property echo : Bool                  # Echo prompt in response
 
     property sampling : SamplingConfig
     property guided : GuidedDecodingConfig
     property banned : BannedStringsConfig
     property lora_request : LoRAAdapter?
+    property tools : ToolConfig
+    property priority : RequestPriority
+
+    # Prompt caching
+    property use_cache : Bool
+    property cache_salt : String?
 
     def initialize(
       @messages = [] of ChatMessage,
@@ -608,10 +1255,15 @@ module PygmalionAgent
       @top_logprobs = nil,
       @n = 1,
       @user = nil,
+      @echo = false,
       @sampling = SamplingConfig.new,
       @guided = GuidedDecodingConfig.new,
       @banned = BannedStringsConfig.new,
-      @lora_request = nil
+      @lora_request = nil,
+      @tools = ToolConfig.new,
+      @priority = RequestPriority::Normal,
+      @use_cache = true,
+      @cache_salt = nil
     )
     end
 
@@ -619,8 +1271,16 @@ module PygmalionAgent
       @messages << ChatMessage.new(role, content)
     end
 
+    def add_multimodal_message(role : String, content : MultimodalContent)
+      @messages << ChatMessage.new(role, content)
+    end
+
     def add_stop(sequence : String)
       @stop << sequence unless @stop.includes?(sequence)
+    end
+
+    def add_tool(tool : ToolDefinition)
+      @tools.add_tool(tool)
     end
 
     def to_json : String
@@ -642,6 +1302,10 @@ module PygmalionAgent
           json.field "max_tokens", @max_tokens
           json.field "stream", @stream
           json.field "n", @n
+
+          if @echo
+            json.field "echo", true
+          end
 
           # Stop sequences
           unless @stop.empty?
@@ -688,10 +1352,260 @@ module PygmalionAgent
           if lora = @lora_request
             json.field "lora_request", lora
           end
+
+          # Tools
+          if @tools.enabled?
+            json.field "tools" do
+              json.array do
+                @tools.tools.each { |t| t.to_json(json) }
+              end
+            end
+            json.field "tool_choice", @tools.tool_choice.to_json_value
+            json.field "parallel_tool_calls", @tools.parallel_tool_calls
+          end
+
+          # Priority
+          if @priority != RequestPriority::Normal
+            json.field "priority", @priority.to_api_value
+          end
+
+          # Caching
+          if !@use_cache
+            json.field "skip_cache", true
+          end
+          if salt = @cache_salt
+            json.field "cache_salt", salt
+          end
         end
       end
     end
   end
+
+  # ==========================================================================
+  # Completion Request (Non-Chat) (NEW)
+  # ==========================================================================
+
+  # Standard completion request (non-chat)
+  class CompletionRequest
+    property prompt : String | Array(String)
+    property model : String?
+    property max_tokens : Int32
+    property stop : Array(String)
+    property stream : Bool
+    property logprobs : Int32?
+    property echo : Bool
+    property suffix : String?
+
+    property sampling : SamplingConfig
+
+    def initialize(
+      @prompt = "",
+      @model = nil,
+      @max_tokens = 512,
+      @stop = [] of String,
+      @stream = false,
+      @logprobs = nil,
+      @echo = false,
+      @suffix = nil,
+      @sampling = SamplingConfig.new
+    )
+    end
+
+    def to_json : String
+      JSON.build do |json|
+        json.object do
+          case p = @prompt
+          when String
+            json.field "prompt", p
+          when Array(String)
+            json.field "prompt" do
+              json.array { p.each { |s| json.string(s) } }
+            end
+          end
+
+          if m = @model
+            json.field "model", m
+          end
+
+          json.field "max_tokens", @max_tokens
+          json.field "stream", @stream
+          json.field "echo", @echo
+
+          unless @stop.empty?
+            json.field "stop" do
+              json.array { @stop.each { |s| json.string(s) } }
+            end
+          end
+
+          if lp = @logprobs
+            json.field "logprobs", lp
+          end
+
+          if suf = @suffix
+            json.field "suffix", suf
+          end
+
+          @sampling.to_api_params.each do |key, value|
+            json.field key, value
+          end
+        end
+      end
+    end
+  end
+
+  # ==========================================================================
+  # Embeddings (NEW)
+  # ==========================================================================
+
+  # Embedding request
+  class EmbeddingRequest
+    property input : String | Array(String)
+    property model : String?
+    property encoding_format : String  # "float" or "base64"
+
+    def initialize(
+      @input = "",
+      @model = nil,
+      @encoding_format = "float"
+    )
+    end
+
+    def to_json : String
+      JSON.build do |json|
+        json.object do
+          case i = @input
+          when String
+            json.field "input", i
+          when Array(String)
+            json.field "input" do
+              json.array { i.each { |s| json.string(s) } }
+            end
+          end
+
+          if m = @model
+            json.field "model", m
+          end
+
+          json.field "encoding_format", @encoding_format
+        end
+      end
+    end
+  end
+
+  # Embedding response
+  class EmbeddingResponse
+    property embeddings : Array(Array(Float64))
+    property model : String
+    property usage : TokenUsage
+
+    def initialize(@embeddings = [] of Array(Float64), @model = "", @usage = TokenUsage.new)
+    end
+
+    def self.from_json(body : String) : EmbeddingResponse
+      json = JSON.parse(body)
+      response = new(model: json["model"]?.try(&.as_s) || "")
+
+      if data = json["data"]?
+        data.as_a.each do |item|
+          if emb = item["embedding"]?
+            response.embeddings << emb.as_a.map(&.as_f)
+          end
+        end
+      end
+
+      if usage = json["usage"]?
+        response.usage = TokenUsage.from_json(usage)
+      end
+
+      response
+    end
+
+    # Get first embedding (convenience)
+    def embedding : Array(Float64)
+      @embeddings.first? || [] of Float64
+    end
+  end
+
+  # ==========================================================================
+  # Tokenization (NEW)
+  # ==========================================================================
+
+  # Tokenize request
+  class TokenizeRequest
+    property text : String
+    property model : String?
+    property add_special_tokens : Bool
+
+    def initialize(@text = "", @model = nil, @add_special_tokens = true)
+    end
+
+    def to_json : String
+      JSON.build do |json|
+        json.object do
+          json.field "text", @text
+          if m = @model
+            json.field "model", m
+          end
+          json.field "add_special_tokens", @add_special_tokens
+        end
+      end
+    end
+  end
+
+  # Tokenize response
+  struct TokenizeResponse
+    property tokens : Array(Int32)
+    property count : Int32
+
+    def initialize(@tokens = [] of Int32, @count = 0)
+    end
+
+    def self.from_json(body : String) : TokenizeResponse
+      json = JSON.parse(body)
+      tokens = json["tokens"]?.try(&.as_a.map(&.as_i)) || [] of Int32
+      count = json["count"]?.try(&.as_i) || tokens.size
+      new(tokens, count)
+    end
+  end
+
+  # Detokenize request
+  class DetokenizeRequest
+    property tokens : Array(Int32)
+    property model : String?
+
+    def initialize(@tokens = [] of Int32, @model = nil)
+    end
+
+    def to_json : String
+      JSON.build do |json|
+        json.object do
+          json.field "tokens" do
+            json.array { @tokens.each { |t| json.number(t) } }
+          end
+          if m = @model
+            json.field "model", m
+          end
+        end
+      end
+    end
+  end
+
+  # Detokenize response
+  struct DetokenizeResponse
+    property text : String
+
+    def initialize(@text = "")
+    end
+
+    def self.from_json(body : String) : DetokenizeResponse
+      json = JSON.parse(body)
+      new(json["text"]?.try(&.as_s) || "")
+    end
+  end
+
+  # ==========================================================================
+  # Response Types
+  # ==========================================================================
 
   # Token usage information
   struct TokenUsage
@@ -721,7 +1635,7 @@ module PygmalionAgent
     end
   end
 
-  # Generation choice
+  # Generation choice (enhanced)
   struct GenerationChoice
     property index : Int32
     property message : ChatMessage
@@ -733,10 +1647,18 @@ module PygmalionAgent
 
     def self.from_json(json : JSON::Any) : GenerationChoice
       message_json = json["message"]
+
+      # Handle tool calls
+      tool_calls : Array(ToolCall)? = nil
+      if tc_json = message_json["tool_calls"]?
+        tool_calls = tc_json.as_a.map { |tc| ToolCall.from_json(tc) }
+      end
+
       message = ChatMessage.new(
         message_json["role"].as_s,
-        message_json["content"].as_s,
-        message_json["name"]?.try(&.as_s)
+        message_json["content"]?.try(&.as_s) || "",
+        message_json["name"]?.try(&.as_s),
+        tool_calls
       )
 
       new(
@@ -744,6 +1666,10 @@ module PygmalionAgent
         message,
         json["finish_reason"]?.try(&.as_s) || "stop"
       )
+    end
+
+    def has_tool_calls? : Bool
+      @message.tool_calls.try(&.size.> 0) || false
     end
   end
 
@@ -788,17 +1714,28 @@ module PygmalionAgent
 
     # Get the primary response text
     def text : String
-      @choices.first?.try(&.message.content) || ""
+      @choices.first?.try(&.message.text_content) || ""
+    end
+
+    # Check if response has tool calls
+    def has_tool_calls? : Bool
+      @choices.any?(&.has_tool_calls?)
+    end
+
+    # Get all tool calls
+    def tool_calls : Array(ToolCall)
+      @choices.flat_map { |c| c.message.tool_calls || [] of ToolCall }
     end
   end
 
-  # Streaming chunk
+  # Streaming chunk (enhanced)
   struct StreamChunk
     property id : String
     property delta : String
     property finish_reason : String?
+    property tool_calls : Array(ToolCall)?
 
-    def initialize(@id, @delta, @finish_reason = nil)
+    def initialize(@id, @delta, @finish_reason = nil, @tool_calls = nil)
     end
 
     def self.from_sse(line : String) : StreamChunk?
@@ -811,11 +1748,16 @@ module PygmalionAgent
         json = JSON.parse(data)
         delta = ""
         finish_reason : String? = nil
+        tool_calls : Array(ToolCall)? = nil
 
         if choices = json["choices"]?
           if first_choice = choices.as_a.first?
             if delta_json = first_choice["delta"]?
               delta = delta_json["content"]?.try(&.as_s) || ""
+
+              if tc = delta_json["tool_calls"]?
+                tool_calls = tc.as_a.map { |t| ToolCall.from_json(t) }
+              end
             end
             finish_reason = first_choice["finish_reason"]?.try(&.as_s)
           end
@@ -824,11 +1766,40 @@ module PygmalionAgent
         new(
           json["id"]?.try(&.as_s) || "",
           delta,
-          finish_reason
+          finish_reason,
+          tool_calls
         )
       rescue
         nil
       end
+    end
+  end
+
+  # Health check response (NEW)
+  struct HealthStatus
+    property status : String
+    property version : String?
+    property model : String?
+    property gpu_memory_used : Float64?
+    property gpu_memory_total : Float64?
+
+    def initialize(@status = "unknown", @version = nil, @model = nil,
+                   @gpu_memory_used = nil, @gpu_memory_total = nil)
+    end
+
+    def self.from_json(body : String) : HealthStatus
+      json = JSON.parse(body)
+      new(
+        status: json["status"]?.try(&.as_s) || "unknown",
+        version: json["version"]?.try(&.as_s),
+        model: json["model"]?.try(&.as_s),
+        gpu_memory_used: json["gpu_memory_used"]?.try(&.as_f),
+        gpu_memory_total: json["gpu_memory_total"]?.try(&.as_f)
+      )
+    end
+
+    def healthy? : Bool
+      @status == "ok" || @status == "healthy"
     end
   end
 
@@ -912,7 +1883,6 @@ module PygmalionAgent
           raise Exception.new("Stream request failed: #{response.status_code}")
         end
 
-        buffer = ""
         response.body_io.each_line do |line|
           line = line.strip
           next if line.empty?
@@ -981,7 +1951,7 @@ module PygmalionAgent
       messages.each do |msg|
         # Account for role/name tokens and message formatting
         total += 4  # Approximate overhead per message
-        total += estimate(msg.content)
+        total += estimate(msg.text_content)
         if name = msg.name
           total += estimate(name) + 1
         end
@@ -1062,6 +2032,9 @@ module PygmalionAgent
     property character : CharacterConfig
     property echo_state : EchoStateConfig
     property token_counter : TokenCounter
+    property speculative : SpeculativeDecodingConfig
+    property caching : CachingConfig
+    property tools : ToolConfig
 
     property model_name : String
     property max_context_length : Int32
@@ -1077,6 +2050,9 @@ module PygmalionAgent
       @character = CharacterConfig.new,
       @echo_state = EchoStateConfig.new,
       @token_counter = TokenCounter.new,
+      @speculative = SpeculativeDecodingConfig.new,
+      @caching = CachingConfig.new,
+      @tools = ToolConfig.new,
       @model_name = "default",
       @max_context_length = 4096,
       @default_max_tokens = 512,
@@ -1102,10 +2078,19 @@ module PygmalionAgent
       config.model_name = model
       config
     end
+
+    # Setup for vision/multimodal model
+    def self.vision(url : String, model : String = "llava") : Config
+      config = new
+      config.api.base_url = url
+      config.model_name = model
+      config.max_context_length = 8192
+      config
+    end
   end
 
   # ==========================================================================
-  # Main Agent Class
+  # Main Agent Class (Enhanced)
   # ==========================================================================
 
   class Agent
@@ -1117,6 +2102,7 @@ module PygmalionAgent
 
     @connected : Bool = false
     @available_models : Array(String) = [] of String
+    @health_status : HealthStatus?
 
     def initialize(@config : Config)
       @atomspace = nil
@@ -1169,6 +2155,21 @@ module PygmalionAgent
       @available_models
     end
 
+    # Health check
+    def health : HealthStatus
+      begin
+        response = @client.get(@config.api.health_endpoint)
+        if response.status_code == 200
+          @health_status = HealthStatus.from_json(response.body)
+        else
+          @health_status = HealthStatus.new(status: "error")
+        end
+      rescue
+        @health_status = HealthStatus.new(status: "unreachable")
+      end
+      @health_status.not_nil!
+    end
+
     # Attach AtomSpace for cognitive-conversational integration
     def attach_atomspace(atomspace : AtomSpace::AtomSpace)
       @atomspace = atomspace
@@ -1204,11 +2205,90 @@ module PygmalionAgent
       response.text
     end
 
+    # Chat with image (multimodal)
+    def chat_with_image(message : String, image_path : String) : String
+      content = MultimodalContent.new
+      content.add_text(message)
+      content.add_image_file(image_path)
+
+      @conversation_history << ChatMessage.user_multimodal(content, @user_name)
+
+      request = GenerationRequest.new(
+        messages: @config.token_counter.truncate_to_fit(@conversation_history),
+        model: @config.model_name,
+        max_tokens: @config.default_max_tokens,
+        sampling: @config.sampling
+      )
+
+      response = generate(request)
+      response.text
+    end
+
+    # Chat with image URL
+    def chat_with_image_url(message : String, image_url : String) : String
+      content = MultimodalContent.new
+      content.add_text(message)
+      content.add_image_url(image_url)
+
+      @conversation_history << ChatMessage.user_multimodal(content, @user_name)
+
+      request = GenerationRequest.new(
+        messages: @config.token_counter.truncate_to_fit(@conversation_history),
+        model: @config.model_name,
+        max_tokens: @config.default_max_tokens,
+        sampling: @config.sampling
+      )
+
+      response = generate(request)
+      response.text
+    end
+
     # Full chat with streaming callback
     def chat_stream(message : String, &block : String -> Nil) : String
       request = build_request(message)
       request.stream = true
       generate_stream(request, &block)
+    end
+
+    # Chat with tools
+    def chat_with_tools(message : String, tools : Array(ToolDefinition), &handler : ToolCall -> String) : String
+      @conversation_history << ChatMessage.user(message, @user_name)
+
+      request = GenerationRequest.new(
+        messages: @config.token_counter.truncate_to_fit(@conversation_history),
+        model: @config.model_name,
+        max_tokens: @config.default_max_tokens,
+        sampling: @config.sampling
+      )
+
+      tools.each { |t| request.add_tool(t) }
+
+      response = generate(request)
+
+      # Handle tool calls if present
+      if response.has_tool_calls?
+        response.tool_calls.each do |call|
+          # Add assistant message with tool call
+          @conversation_history << ChatMessage.assistant_with_tool_calls([call])
+
+          # Execute tool and get result
+          result = handler.call(call)
+
+          # Add tool response
+          @conversation_history << ChatMessage.tool_response(call.id, result)
+        end
+
+        # Generate final response
+        followup_request = GenerationRequest.new(
+          messages: @config.token_counter.truncate_to_fit(@conversation_history),
+          model: @config.model_name,
+          max_tokens: @config.default_max_tokens,
+          sampling: @config.sampling
+        )
+        response = generate(followup_request)
+      end
+
+      response.text
     end
 
     # Build a generation request from a message
@@ -1231,7 +2311,8 @@ module PygmalionAgent
         stream: @config.stream_by_default,
         sampling: @config.sampling,
         guided: @config.guided,
-        banned: @config.banned
+        banned: @config.banned,
+        tools: @config.tools
       )
 
       # Add character-specific stop sequences
@@ -1247,7 +2328,7 @@ module PygmalionAgent
     def generate(request : GenerationRequest) : GenerationResponse
       CogUtil::Logger.info("Generating response with #{request.messages.size} messages")
 
-      response = @client.post(@config.api.completions_endpoint, request.to_json)
+      response = @client.post(@config.api.chat_completions_endpoint, request.to_json)
 
       if response.status_code != 200
         CogUtil::Logger.error("Generation failed: #{response.status_code} - #{response.body}")
@@ -1256,9 +2337,11 @@ module PygmalionAgent
 
       gen_response = GenerationResponse.from_json(response.body)
 
-      # Add assistant response to history
-      if text = gen_response.choices.first?.try(&.message)
-        @conversation_history << text
+      # Add assistant response to history (only if no tool calls)
+      unless gen_response.has_tool_calls?
+        if text = gen_response.choices.first?.try(&.message)
+          @conversation_history << text
+        end
       end
 
       CogUtil::Logger.info("Generated #{gen_response.usage.completion_tokens} tokens")
@@ -1272,7 +2355,7 @@ module PygmalionAgent
 
       CogUtil::Logger.info("Streaming response with #{request.messages.size} messages")
 
-      @client.post_stream(@config.api.completions_endpoint, request.to_json) do |chunk|
+      @client.post_stream(@config.api.chat_completions_endpoint, request.to_json) do |chunk|
         unless chunk.delta.empty?
           full_response << chunk.delta
           block.call(chunk.delta)
@@ -1285,6 +2368,78 @@ module PygmalionAgent
       @conversation_history << ChatMessage.assistant(result, @config.character.name)
 
       result
+    end
+
+    # Standard completion (non-chat)
+    def complete(prompt : String, max_tokens : Int32? = nil) : String
+      request = CompletionRequest.new(
+        prompt: prompt,
+        model: @config.model_name,
+        max_tokens: max_tokens || @config.default_max_tokens,
+        sampling: @config.sampling
+      )
+
+      response = @client.post(@config.api.completions_endpoint, request.to_json)
+
+      if response.status_code != 200
+        raise Exception.new("Completion failed: #{response.status_code}")
+      end
+
+      json = JSON.parse(response.body)
+      json["choices"]?.try(&.as_a.first?).try { |c| c["text"]?.try(&.as_s) } || ""
+    end
+
+    # Get embeddings
+    def embed(text : String) : Array(Float64)
+      request = EmbeddingRequest.new(input: text, model: @config.model_name)
+      response = @client.post(@config.api.embeddings_endpoint, request.to_json)
+
+      if response.status_code != 200
+        raise Exception.new("Embedding failed: #{response.status_code}")
+      end
+
+      EmbeddingResponse.from_json(response.body).embedding
+    end
+
+    # Get embeddings for multiple texts
+    def embed_batch(texts : Array(String)) : Array(Array(Float64))
+      request = EmbeddingRequest.new(input: texts, model: @config.model_name)
+      response = @client.post(@config.api.embeddings_endpoint, request.to_json)
+
+      if response.status_code != 200
+        raise Exception.new("Embedding failed: #{response.status_code}")
+      end
+
+      EmbeddingResponse.from_json(response.body).embeddings
+    end
+
+    # Tokenize text
+    def tokenize(text : String) : TokenizeResponse
+      request = TokenizeRequest.new(text: text, model: @config.model_name)
+      response = @client.post(@config.api.tokenize_endpoint, request.to_json)
+
+      if response.status_code != 200
+        raise Exception.new("Tokenization failed: #{response.status_code}")
+      end
+
+      TokenizeResponse.from_json(response.body)
+    end
+
+    # Detokenize tokens
+    def detokenize(tokens : Array(Int32)) : String
+      request = DetokenizeRequest.new(tokens: tokens, model: @config.model_name)
+      response = @client.post(@config.api.detokenize_endpoint, request.to_json)
+
+      if response.status_code != 200
+        raise Exception.new("Detokenization failed: #{response.status_code}")
+      end
+
+      DetokenizeResponse.from_json(response.body).text
+    end
+
+    # Count tokens in text (using API)
+    def count_tokens(text : String) : Int32
+      tokenize(text).count
     end
 
     # Regenerate last response
@@ -1356,10 +2511,10 @@ module PygmalionAgent
 
       # Placeholder for actual tensor computation
       {
-        "prime_factors" => [] of Float64,
-        "rooted_trees" => [] of Float64,
-        "gestalt_state" => [] of Float64,
-        "reservoir_state" => [] of Float64
+        "prime_factors"   => [] of Float64,
+        "rooted_trees"    => [] of Float64,
+        "gestalt_state"   => [] of Float64,
+        "reservoir_state" => [] of Float64,
       }
     end
 
@@ -1382,16 +2537,18 @@ module PygmalionAgent
     # Get agent status
     def status : Hash(String, String)
       {
-        "agent_status" => @connected ? "connected" : "disconnected",
-        "model" => @config.model_name,
-        "api_url" => @config.api.base_url,
-        "api_type" => @config.api.api_type.to_s,
-        "available_models" => @available_models.join(", "),
+        "agent_status"       => @connected ? "connected" : "disconnected",
+        "model"              => @config.model_name,
+        "api_url"            => @config.api.base_url,
+        "api_type"           => @config.api.api_type.to_s,
+        "available_models"   => @available_models.join(", "),
         "echo_state_enabled" => @config.echo_state.cognitive_binding.to_s,
-        "conversation_length" => @conversation_history.size.to_s,
+        "conversation_length"=> @conversation_history.size.to_s,
         "atomspace_attached" => (@atomspace.nil? ? "false" : "true"),
-        "character" => @config.character.name,
-        "sampling_preset" => describe_sampling
+        "character"          => @config.character.name,
+        "sampling_preset"    => describe_sampling,
+        "tools_enabled"      => @config.tools.enabled?.to_s,
+        "caching_enabled"    => @config.caching.enable_prefix_caching.to_s,
       }
     end
 
@@ -1403,6 +2560,7 @@ module PygmalionAgent
       parts << "mirostat" if s.mirostat_mode > 0
       parts << "DRY" if s.dry_multiplier > 0
       parts << "XTC" if s.xtc_probability > 0
+      parts << "seed=#{s.seed}" if s.seed
       parts.join(", ")
     end
 
@@ -1433,7 +2591,7 @@ module PygmalionAgent
       when :text
         @conversation_history.map do |m|
           name = m.name || m.role.capitalize
-          "#{name}: #{m.content}"
+          "#{name}: #{m.text_content}"
         end.join("\n\n")
       else
         raise ArgumentError.new("Unknown format: #{format}")
@@ -1450,7 +2608,7 @@ module PygmalionAgent
         messages.as_a.each do |msg|
           @conversation_history << ChatMessage.new(
             msg["role"].as_s,
-            msg["content"].as_s,
+            msg["content"]?.try(&.as_s) || "",
             msg["name"]?.try(&.as_s)
           )
         end
@@ -1508,5 +2666,20 @@ module PygmalionAgent
     agent = Agent.new(config)
     agent.set_character(character)
     agent
+  end
+
+  # Create vision/multimodal agent
+  def self.create_vision_agent(api_url : String, model : String = "llava") : Agent
+    config = Config.vision(api_url, model)
+    Agent.new(config)
+  end
+
+  # Create tool-enabled agent
+  def self.create_tool_agent(api_url : String, model : String, tools : Array(ToolDefinition)) : Agent
+    config = Config.new
+    config.api.base_url = api_url
+    config.model_name = model
+    tools.each { |t| config.tools.add_tool(t) }
+    Agent.new(config)
   end
 end
