@@ -1,12 +1,20 @@
 # Integration Module - Unified integration interface for CrystalCog
 #
 # This module provides a unified interface for all integration components:
+#
+# Phase 5 Integrations:
 # - CogPy/PyG Framework Integration
 # - Pygmalion AI System
 # - Galatea Frontend (github.com/9cog/galatea-frontend)
 # - Paphos Backend (github.com/9cog/paphos-backend)
 # - Crystal Acceleration Engine
 # - Unified Cognitive Agency Controller
+#
+# Phase 6 Extended Integrations:
+# - Neo4j Graph Database Integration
+# - IPFS Decentralized Storage Integration
+# - MeTTa Hypergraph Rewriting Language
+# - TypeScript SDK for Web Bindings
 
 require "./cogpy_bridge"
 require "./pyg_adapter"
@@ -15,11 +23,15 @@ require "./galatea_frontend"
 require "./paphos_connector"
 require "./crystal_accelerator"
 require "./cognitive_agency"
+require "./neo4j_integration"
+require "./ipfs_integration"
+require "./metta_integration"
+require "./typescript_sdk"
 require "../cogutil/logger"
 require "../atomspace/atomspace"
 
 module CrystalCogIntegration
-  VERSION = "0.2.0"
+  VERSION = "0.3.0"
 
   # External repository references
   EXTERNAL_REPOS = {
