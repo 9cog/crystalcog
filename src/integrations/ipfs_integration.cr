@@ -1012,6 +1012,178 @@ module CrystalCog
         @pubsub.unsubscribe(@sync_topic)
       end
     end
+
+    # Unified IPFS Integration wrapper (follows Phase 5 patterns)
+    class IPFSIntegration
+      VERSION = "0.3.0"
+
+      property config : IPFSConfig
+      property client : IPFSClient
+      property storage : IPFSAtomSpaceStorage?
+      property atomspace : AtomSpace::AtomSpace?
+      property sync : IPFSAtomSpaceSync?
+      property initialized : Bool
+      property atoms_stored : Int64
+      property snapshots_created : Int64
+
+      def initialize(@config = IPFSConfig.new)
+        @client = IPFSClient.new(@config)
+        @storage = nil
+        @atomspace = nil
+        @sync = nil
+        @initialized = false
+        @atoms_stored = 0_i64
+        @snapshots_created = 0_i64
+      end
+
+      # Attach AtomSpace (Phase 5 pattern)
+      def attach_atomspace(atomspace : AtomSpace::AtomSpace)
+        @atomspace = atomspace
+      end
+
+      # Initialize backend (Phase 5 pattern)
+      def initialize_backend : Bool
+        return true if @initialized
+
+        unless @client.connect
+          return false
+        end
+
+        @storage = IPFSAtomSpaceStorage.new(@client)
+        unless @storage.not_nil!.initialize_storage
+          return false
+        end
+
+        @sync = IPFSAtomSpaceSync.new(@storage.not_nil!, @client)
+        @initialized = true
+        true
+      end
+
+      # Status reporting (Phase 5 pattern)
+      def status : Hash(String, String)
+        stats = @storage.try(&.storage_stats) || IPFSStorageStats.new
+        node_info = @client.node_info
+
+        {
+          "integration"          => "ipfs",
+          "version"              => VERSION,
+          "status"               => @initialized ? "ready" : "not_initialized",
+          "connected"            => @client.connected?.to_s,
+          "atomspace_attached"   => (!@atomspace.nil?).to_s,
+          "host"                 => @config.api_host,
+          "port"                 => @config.api_port.to_s,
+          "node_id"              => node_info.try(&.id) || "unknown",
+          "ipfs_version"         => @client.version,
+          "repo_size"            => stats.repo_size.to_s,
+          "storage_max"          => stats.storage_max.to_s,
+          "num_objects"          => stats.num_objects.to_s,
+          "usage_percent"        => stats.usage_percent.round(2).to_s,
+          "atoms_stored"         => @atoms_stored.to_s,
+          "snapshots_created"    => @snapshots_created.to_s,
+          "root_cid"             => stats.root_cid.try(&.hash) || "none",
+        }
+      end
+
+      # Store atom to IPFS
+      def store_atom(
+        id : String,
+        atom_type : String,
+        name : String? = nil,
+        truth_value : {Float64, Float64} = {1.0, 1.0}
+      ) : IPFSCid?
+        return nil unless @storage
+
+        atom = IPFSAtom.new(
+          id: id,
+          atom_type: atom_type,
+          name: name,
+          truth_value_strength: truth_value[0],
+          truth_value_confidence: truth_value[1]
+        )
+
+        cid = @storage.not_nil!.store_atom(atom)
+        if cid
+          @atoms_stored += 1
+        end
+        cid
+      end
+
+      # Load atom from IPFS
+      def load_atom(atom_id : String) : IPFSAtom?
+        @storage.try(&.load_atom(atom_id))
+      end
+
+      # Create snapshot of AtomSpace
+      def create_snapshot(atoms : Array(IPFSAtom), links : Array(IPFSLink) = [] of IPFSLink) : IPFSCid?
+        return nil unless @storage
+
+        cid = @storage.not_nil!.store_snapshot(atoms, links)
+        if cid
+          @snapshots_created += 1
+        end
+        cid
+      end
+
+      # Load snapshot
+      def load_snapshot(cid : IPFSCid? = nil) : {Array(IPFSAtom), Array(IPFSLink)}?
+        @storage.try(&.load_snapshot(cid))
+      end
+
+      # Pin content
+      def pin(cid : IPFSCid) : Bool
+        @client.pin(cid)
+      end
+
+      # Get version history
+      def versions : Array({Time, IPFSCid})
+        @storage.try(&.get_versions) || [] of {Time, IPFSCid}
+      end
+
+      # Start sync
+      def start_sync(&on_update : IPFSCid -> Nil)
+        @sync.try(&.start_sync(&on_update))
+      end
+
+      # Stop sync
+      def stop_sync
+        @sync.try(&.stop_sync)
+      end
+
+      # Disconnect
+      def disconnect
+        stop_sync
+        @initialized = false
+      end
+
+      # Link to cognitive agency (Phase 5 pattern)
+      def link_component(name : String)
+        # Cognitive agency linking support
+      end
+    end
+  end
+
+  # Module-level factory methods (Phase 5 pattern)
+  module IPFS
+    def self.create_default_integration : Integrations::IPFSIntegration
+      Integrations::IPFSIntegration.new
+    end
+
+    def self.create_integration(
+      host : String,
+      port : Int32 = 5001,
+      gateway_port : Int32 = 8080
+    ) : Integrations::IPFSIntegration
+      config = Integrations::IPFSConfig.new(
+        api_host: host,
+        api_port: port,
+        gateway_port: gateway_port
+      )
+      Integrations::IPFSIntegration.new(config)
+    end
+
+    def self.create_integration(config : Integrations::IPFSConfig) : Integrations::IPFSIntegration
+      Integrations::IPFSIntegration.new(config)
+    end
   end
 end
 

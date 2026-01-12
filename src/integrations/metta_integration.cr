@@ -1304,6 +1304,176 @@ module CrystalCog
         matcher.match_all(atoms, parsed.first)
       end
     end
+
+    # MeTTa Configuration
+    class MeTTaConfig
+      property load_stdlib : Bool
+      property max_reduction_steps : Int32
+      property enable_trace : Bool
+      property default_space_name : String
+
+      def initialize(
+        @load_stdlib = true,
+        @max_reduction_steps = 1000,
+        @enable_trace = false,
+        @default_space_name = "default"
+      )
+      end
+    end
+
+    # Unified MeTTa Integration wrapper (follows Phase 5 patterns)
+    class MeTTaIntegration
+      VERSION = "0.3.0"
+
+      property config : MeTTaConfig
+      property interpreter : MeTTaInterpreter
+      property atomspace : AtomSpace::AtomSpace?
+      property bridge : MeTTaAtomSpaceBridge
+      property initialized : Bool
+      property expressions_evaluated : Int64
+      property rules_defined : Int64
+      property patterns_matched : Int64
+
+      def initialize(@config = MeTTaConfig.new)
+        @interpreter = MeTTaInterpreter.new
+        @bridge = MeTTaAtomSpaceBridge.new(@interpreter)
+        @atomspace = nil
+        @initialized = false
+        @expressions_evaluated = 0_i64
+        @rules_defined = 0_i64
+        @patterns_matched = 0_i64
+      end
+
+      # Attach AtomSpace (Phase 5 pattern)
+      def attach_atomspace(atomspace : AtomSpace::AtomSpace)
+        @atomspace = atomspace
+      end
+
+      # Initialize backend (Phase 5 pattern)
+      def initialize_backend : Bool
+        return true if @initialized
+
+        if @config.load_stdlib
+          @interpreter.load_stdlib
+        end
+
+        @initialized = true
+        true
+      end
+
+      # Status reporting (Phase 5 pattern)
+      def status : Hash(String, String)
+        space = @interpreter.space
+
+        {
+          "integration"            => "metta",
+          "version"                => VERSION,
+          "status"                 => @initialized ? "ready" : "not_initialized",
+          "atomspace_attached"     => (!@atomspace.nil?).to_s,
+          "stdlib_loaded"          => @config.load_stdlib.to_s,
+          "space_name"             => space.@name,
+          "space_size"             => space.size.to_s,
+          "expressions_evaluated"  => @expressions_evaluated.to_s,
+          "rules_defined"          => @rules_defined.to_s,
+          "patterns_matched"       => @patterns_matched.to_s,
+          "max_reduction_steps"    => @config.max_reduction_steps.to_s,
+          "trace_enabled"          => @config.enable_trace.to_s,
+        }
+      end
+
+      # Run MeTTa code
+      def run(code : String) : Array(MeTTaAtom)
+        @expressions_evaluated += 1
+        @interpreter.run(code)
+      end
+
+      # Evaluate single expression
+      def eval(code : String) : MeTTaAtom?
+        @expressions_evaluated += 1
+        @interpreter.eval(code)
+      end
+
+      # Define a rewrite rule
+      def define_rule(name : String, pattern : String, template : String)
+        @interpreter.run("(= #{pattern} #{template})")
+        @rules_defined += 1
+      end
+
+      # Query the space
+      def query(pattern : String) : Array(MeTTaBindings)
+        @patterns_matched += 1
+        @interpreter.query(pattern)
+      end
+
+      # Add atom to space
+      def add_atom(atom : MeTTaAtom)
+        @interpreter.add(atom)
+      end
+
+      # Create and add atom from string
+      def add(metta_code : String)
+        parser = MeTTaParser.new(metta_code)
+        atoms = parser.parse
+        atoms.each { |atom| @interpreter.add(atom) }
+      end
+
+      # Use a different space
+      def use_space(name : String) : MeTTaSpace
+        @interpreter.use_space(name)
+      end
+
+      # Get current space
+      def space : MeTTaSpace
+        @interpreter.space
+      end
+
+      # Export space to MeTTa format
+      def export : String
+        @interpreter.space.to_metta
+      end
+
+      # Convert AtomSpace atom to MeTTa
+      def atomspace_to_metta(atom_type : String, name : String?, outgoing : Array(MeTTaAtom) = [] of MeTTaAtom) : MeTTaAtom
+        @bridge.to_metta_atom(atom_type, name, outgoing)
+      end
+
+      # Start REPL
+      def repl
+        @interpreter.repl
+      end
+
+      # Disconnect
+      def disconnect
+        @initialized = false
+      end
+
+      # Link to cognitive agency (Phase 5 pattern)
+      def link_component(name : String)
+        # Cognitive agency linking support
+      end
+    end
+  end
+
+  # Module-level factory methods (Phase 5 pattern)
+  module MeTTa
+    def self.create_default_integration : Integrations::MeTTaIntegration
+      Integrations::MeTTaIntegration.new
+    end
+
+    def self.create_integration(
+      load_stdlib : Bool = true,
+      max_steps : Int32 = 1000
+    ) : Integrations::MeTTaIntegration
+      config = Integrations::MeTTaConfig.new(
+        load_stdlib: load_stdlib,
+        max_reduction_steps: max_steps
+      )
+      Integrations::MeTTaIntegration.new(config)
+    end
+
+    def self.create_integration(config : Integrations::MeTTaConfig) : Integrations::MeTTaIntegration
+      Integrations::MeTTaIntegration.new(config)
+    end
   end
 end
 

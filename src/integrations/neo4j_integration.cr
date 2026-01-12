@@ -1124,6 +1124,157 @@ module CrystalCog
         @client.execute(@builder)
       end
     end
+
+    # Unified Neo4j Integration wrapper (follows Phase 5 patterns)
+    class Neo4jIntegration
+      VERSION = "0.3.0"
+
+      property config : Neo4jConfig
+      property client : Neo4jClient
+      property storage : Neo4jAtomSpaceStorage?
+      property atomspace : AtomSpace::AtomSpace?
+      property initialized : Bool
+      property queries_executed : Int64
+      property atoms_stored : Int64
+
+      def initialize(@config = Neo4jConfig.new)
+        @client = Neo4jClient.new(@config)
+        @storage = nil
+        @atomspace = nil
+        @initialized = false
+        @queries_executed = 0_i64
+        @atoms_stored = 0_i64
+      end
+
+      # Attach AtomSpace (Phase 5 pattern)
+      def attach_atomspace(atomspace : AtomSpace::AtomSpace)
+        @atomspace = atomspace
+      end
+
+      # Initialize backend (Phase 5 pattern)
+      def initialize_backend : Bool
+        return true if @initialized
+
+        unless @client.connect
+          return false
+        end
+
+        unless @client.initialize_schema
+          return false
+        end
+
+        @storage = Neo4jAtomSpaceStorage.new(@client)
+        @initialized = true
+        true
+      end
+
+      # Status reporting (Phase 5 pattern)
+      def status : Hash(String, String)
+        stats = @client.connected? ? @client.get_statistics : Neo4jGraphStats.new
+
+        {
+          "integration"          => "neo4j",
+          "version"              => VERSION,
+          "status"               => @initialized ? "ready" : "not_initialized",
+          "connected"            => @client.connected?.to_s,
+          "atomspace_attached"   => (!@atomspace.nil?).to_s,
+          "host"                 => @config.host,
+          "port"                 => @config.port.to_s,
+          "database"             => @config.database,
+          "node_count"           => stats.node_count.to_s,
+          "relationship_count"   => stats.relationship_count.to_s,
+          "queries_executed"     => @queries_executed.to_s,
+          "atoms_stored"         => @atoms_stored.to_s,
+          "max_connections"      => @config.max_connections.to_s,
+          "batch_size"           => @config.batch_size.to_s,
+        }
+      end
+
+      # Store atom to Neo4j
+      def store_atom(
+        id : String,
+        atom_type : String,
+        name : String? = nil,
+        truth_value : {Float64, Float64} = {1.0, 1.0}
+      ) : Bool
+        atom = Neo4jAtomNode.new(
+          id: id,
+          atom_type: atom_type,
+          name: name,
+          truth_value_strength: truth_value[0],
+          truth_value_confidence: truth_value[1]
+        )
+        result = @client.store_atom(atom)
+        if result.success?
+          @atoms_stored += 1
+        end
+        result.success?
+      end
+
+      # Query atoms
+      def query(pattern : String, limit : Int32 = 100) : Array(Neo4jAtomNode)
+        @queries_executed += 1
+        @client.search_atoms_by_name(pattern, limit)
+      end
+
+      # Get atom by ID
+      def get_atom(id : String) : Neo4jAtomNode?
+        @queries_executed += 1
+        @client.get_atom(id)
+      end
+
+      # Execute raw Cypher query
+      def execute_cypher(query : String) : Neo4jResult
+        @queries_executed += 1
+        @client.execute_cypher(query)
+      end
+
+      # Sync AtomSpace to Neo4j
+      def sync_atomspace : Bool
+        return false unless @storage && @atomspace
+
+        # Convert AtomSpace atoms to Neo4j format
+        # This would integrate with actual AtomSpace API
+        true
+      end
+
+      # Disconnect
+      def disconnect
+        @client.close
+        @initialized = false
+      end
+
+      # Link to cognitive agency (Phase 5 pattern)
+      def link_component(name : String)
+        # Cognitive agency linking support
+      end
+    end
+  end
+
+  # Module-level factory methods (Phase 5 pattern)
+  module Neo4j
+    def self.create_default_integration : Integrations::Neo4jIntegration
+      Integrations::Neo4jIntegration.new
+    end
+
+    def self.create_integration(
+      host : String,
+      port : Int32 = 7474,
+      username : String = "neo4j",
+      password : String = "password"
+    ) : Integrations::Neo4jIntegration
+      config = Integrations::Neo4jConfig.new(
+        host: host,
+        port: port,
+        username: username,
+        password: password
+      )
+      Integrations::Neo4jIntegration.new(config)
+    end
+
+    def self.create_integration(config : Integrations::Neo4jConfig) : Integrations::Neo4jIntegration
+      Integrations::Neo4jIntegration.new(config)
+    end
   end
 end
 

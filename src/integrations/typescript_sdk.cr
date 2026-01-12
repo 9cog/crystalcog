@@ -1385,6 +1385,125 @@ const results = await client.query({ pattern: 'Dog' });
         }.to_json
       end
     end
+
+    # Unified TypeScript SDK Integration wrapper (follows Phase 5 patterns)
+    class TypeScriptSDKIntegration
+      VERSION = "0.3.0"
+
+      property config : TypeScriptSDKConfig
+      property server : TypeScriptSDKServer
+      property generator : TypeScriptGenerator
+      property atomspace : AtomSpace::AtomSpace?
+      property initialized : Bool
+      property requests_handled : Int64
+      property websocket_connections : Int32
+
+      def initialize(@config = TypeScriptSDKConfig.new)
+        @server = TypeScriptSDKServer.new(@config)
+        @generator = TypeScriptGenerator.new
+        @atomspace = nil
+        @initialized = false
+        @requests_handled = 0_i64
+        @websocket_connections = 0
+      end
+
+      # Attach AtomSpace (Phase 5 pattern)
+      def attach_atomspace(atomspace : AtomSpace::AtomSpace)
+        @atomspace = atomspace
+      end
+
+      # Initialize backend (Phase 5 pattern) - alias for start
+      def initialize_backend : Bool
+        return true if @initialized
+        @initialized = true
+        true
+      end
+
+      # Start server
+      def start
+        initialize_backend
+        spawn { @server.start }
+      end
+
+      # Stop server
+      def stop
+        @server.stop
+        @initialized = false
+      end
+
+      # Status reporting (Phase 5 pattern)
+      def status : Hash(String, String)
+        {
+          "integration"            => "typescript_sdk",
+          "version"                => VERSION,
+          "status"                 => @initialized ? "running" : "stopped",
+          "atomspace_attached"     => (!@atomspace.nil?).to_s,
+          "host"                   => @config.host,
+          "port"                   => @config.port.to_s,
+          "api_prefix"             => @config.api_prefix,
+          "websocket_enabled"      => @config.enable_websocket.to_s,
+          "auth_enabled"           => @config.auth_enabled.to_s,
+          "cors_origins"           => @config.cors_origins.join(","),
+          "requests_handled"       => @requests_handled.to_s,
+          "websocket_connections"  => @websocket_connections.to_s,
+        }
+      end
+
+      # Generate SDK files
+      def generate_types : String
+        @generator.generate_types
+      end
+
+      def generate_client : String
+        @generator.generate_client_code
+      end
+
+      def generate_package : String
+        @generator.generate_package_json
+      end
+
+      # Write SDK to directory
+      def write_sdk_to(directory : String)
+        Dir.mkdir_p(directory)
+        File.write(File.join(directory, "types.ts"), generate_types)
+        File.write(File.join(directory, "client.ts"), generate_client)
+        File.write(File.join(directory, "package.json"), generate_package)
+      end
+
+      # Disconnect
+      def disconnect
+        stop
+      end
+
+      # Link to cognitive agency (Phase 5 pattern)
+      def link_component(name : String)
+        # Cognitive agency linking support
+      end
+    end
+  end
+
+  # Module-level factory methods (Phase 5 pattern)
+  module TypeScriptSDK
+    def self.create_default_integration : Integrations::TypeScriptSDKIntegration
+      Integrations::TypeScriptSDKIntegration.new
+    end
+
+    def self.create_integration(
+      host : String = "0.0.0.0",
+      port : Int32 = 8080,
+      enable_websocket : Bool = true
+    ) : Integrations::TypeScriptSDKIntegration
+      config = Integrations::TypeScriptSDKConfig.new(
+        host: host,
+        port: port,
+        enable_websocket: enable_websocket
+      )
+      Integrations::TypeScriptSDKIntegration.new(config)
+    end
+
+    def self.create_integration(config : Integrations::TypeScriptSDKConfig) : Integrations::TypeScriptSDKIntegration
+      Integrations::TypeScriptSDKIntegration.new(config)
+    end
   end
 end
 
