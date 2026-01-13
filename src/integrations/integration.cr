@@ -1,12 +1,20 @@
 # Integration Module - Unified integration interface for CrystalCog
 #
 # This module provides a unified interface for all integration components:
+#
+# Phase 5 Integrations:
 # - CogPy/PyG Framework Integration
 # - Pygmalion AI System
 # - Galatea Frontend (github.com/9cog/galatea-frontend)
 # - Paphos Backend (github.com/9cog/paphos-backend)
 # - Crystal Acceleration Engine
 # - Unified Cognitive Agency Controller
+#
+# Phase 6 Extended Integrations:
+# - Neo4j Graph Database Integration
+# - IPFS Decentralized Storage Integration
+# - MeTTa Hypergraph Rewriting Language
+# - TypeScript SDK for Web Bindings
 
 require "./cogpy_bridge"
 require "./pyg_adapter"
@@ -15,11 +23,15 @@ require "./galatea_frontend"
 require "./paphos_connector"
 require "./crystal_accelerator"
 require "./cognitive_agency"
+require "./neo4j_integration"
+require "./ipfs_integration"
+require "./metta_integration"
+require "./typescript_sdk"
 require "../cogutil/logger"
 require "../atomspace/atomspace"
 
 module CrystalCogIntegration
-  VERSION = "0.2.0"
+  VERSION = "0.3.0"
 
   # External repository references
   EXTERNAL_REPOS = {
@@ -29,6 +41,7 @@ module CrystalCogIntegration
 
   # Main integration manager with cognitive agency coordination
   class Manager
+    # Phase 5 Integrations
     property cogpy_bridge : CogPyBridge::Bridge?
     property pyg_adapter : PygAdapter::Adapter?
     property pygmalion_agent : PygmalionAgent::Agent?
@@ -36,10 +49,18 @@ module CrystalCogIntegration
     property paphos_connector : PaphosBackend::Connector?
     property crystal_accelerator : CrystalAccelerator::Engine?
     property cognitive_agency : CognitiveAgency::UnifiedAgencyController?
+
+    # Phase 6 Extended Integrations
+    property neo4j_integration : CrystalCog::Integrations::Neo4jIntegration?
+    property ipfs_integration : CrystalCog::Integrations::IPFSIntegration?
+    property metta_integration : CrystalCog::Integrations::MeTTaIntegration?
+    property typescript_sdk : CrystalCog::Integrations::TypeScriptSDKIntegration?
+
     property atomspace : AtomSpace::AtomSpace?
     property initialized : Bool
 
     def initialize
+      # Phase 5
       @cogpy_bridge = nil
       @pyg_adapter = nil
       @pygmalion_agent = nil
@@ -47,6 +68,13 @@ module CrystalCogIntegration
       @paphos_connector = nil
       @crystal_accelerator = nil
       @cognitive_agency = nil
+
+      # Phase 6
+      @neo4j_integration = nil
+      @ipfs_integration = nil
+      @metta_integration = nil
+      @typescript_sdk = nil
+
       @atomspace = nil
       @initialized = false
     end
@@ -183,6 +211,50 @@ module CrystalCogIntegration
         # Already initialized above
         CogUtil::Logger.info("Cognitive agency controller ready")
 
+      # Phase 6 Extended Integrations
+      when "neo4j"
+        host = config.try(&.["host"]) || "localhost"
+        port = (config.try(&.["port"]) || "7474").to_i
+        username = config.try(&.["username"]) || "neo4j"
+        password = config.try(&.["password"]) || "password"
+
+        @neo4j_integration = CrystalCog::Neo4j.create_integration(host, port, username, password)
+        @neo4j_integration.not_nil!.attach_atomspace(atomspace)
+        @neo4j_integration.not_nil!.initialize_backend
+        link_to_agency("neo4j")
+        CogUtil::Logger.info("Neo4j integration initialized")
+
+      when "ipfs"
+        host = config.try(&.["host"]) || "localhost"
+        port = (config.try(&.["port"]) || "5001").to_i
+
+        @ipfs_integration = CrystalCog::IPFS.create_integration(host, port)
+        @ipfs_integration.not_nil!.attach_atomspace(atomspace)
+        @ipfs_integration.not_nil!.initialize_backend
+        link_to_agency("ipfs")
+        CogUtil::Logger.info("IPFS integration initialized")
+
+      when "metta"
+        load_stdlib = config.try(&.["load_stdlib"]) != "false"
+        max_steps = (config.try(&.["max_steps"]) || "1000").to_i
+
+        @metta_integration = CrystalCog::MeTTa.create_integration(load_stdlib, max_steps)
+        @metta_integration.not_nil!.attach_atomspace(atomspace)
+        @metta_integration.not_nil!.initialize_backend
+        link_to_agency("metta")
+        CogUtil::Logger.info("MeTTa integration initialized")
+
+      when "typescript_sdk", "typescript", "sdk"
+        host = config.try(&.["host"]) || "0.0.0.0"
+        port = (config.try(&.["port"]) || "8080").to_i
+        websocket = config.try(&.["websocket"]) != "false"
+
+        @typescript_sdk = CrystalCog::TypeScriptSDK.create_integration(host, port, websocket)
+        @typescript_sdk.not_nil!.attach_atomspace(atomspace)
+        @typescript_sdk.not_nil!.initialize_backend
+        link_to_agency("typescript_sdk")
+        CogUtil::Logger.info("TypeScript SDK integration initialized")
+
       else
         CogUtil::Logger.error("Unknown integration: #{integration_name}")
       end
@@ -218,6 +290,23 @@ module CrystalCogIntegration
 
       if accelerator = @crystal_accelerator
         status["accelerator"] = accelerator.status
+      end
+
+      # Phase 6 integrations
+      if neo4j = @neo4j_integration
+        status["neo4j"] = neo4j.status
+      end
+
+      if ipfs = @ipfs_integration
+        status["ipfs"] = ipfs.status
+      end
+
+      if metta = @metta_integration
+        status["metta"] = metta.status
+      end
+
+      if sdk = @typescript_sdk
+        status["typescript_sdk"] = sdk.status
       end
 
       # Add external repo info
@@ -370,17 +459,29 @@ module CrystalCogIntegration
     def shutdown_all
       CogUtil::Logger.info("Shutting down all integrations")
 
+      # Phase 5 integrations
       @cogpy_bridge.try &.disconnect
       @galatea_frontend.try &.stop
       @paphos_connector.try &.disconnect
       @cognitive_agency.try &.reset
 
+      # Phase 6 integrations
+      @neo4j_integration.try &.disconnect
+      @ipfs_integration.try &.disconnect
+      @metta_integration.try &.disconnect
+      @typescript_sdk.try &.disconnect
+
+      # Clear all references
       @paphos_connector = nil
       @pygmalion_agent = nil
       @pyg_adapter = nil
       @crystal_accelerator = nil
       @galatea_frontend = nil
       @cognitive_agency = nil
+      @neo4j_integration = nil
+      @ipfs_integration = nil
+      @metta_integration = nil
+      @typescript_sdk = nil
 
       @initialized = false
       CogUtil::Logger.info("All integrations shut down")
