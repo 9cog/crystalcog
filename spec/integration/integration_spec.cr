@@ -521,12 +521,12 @@ describe "CrystalCog Integration Scenarios" do
       ure_engine = URE.create_engine(atomspace)
 
       # Measure reasoning performance
-      start_time = Time.monotonic
+      start_time = Time.instant
 
       pln_atoms = pln_engine.reason(5)
       ure_atoms = ure_engine.forward_chain(3)
 
-      end_time = Time.monotonic
+      end_time = Time.instant
       duration = end_time - start_time
 
       final_size = atomspace.size
@@ -593,15 +593,18 @@ describe "CrystalCog Integration Scenarios" do
       # Run reasoning on large atomspace
       pln_engine = PLN.create_engine(atomspace)
 
-      start_time = Time.monotonic
+      start_time = Time.instant
       new_atoms = pln_engine.reason(3) # Limited iterations for large space
-      end_time = Time.monotonic
+      end_time = Time.instant
 
       duration = end_time - start_time
       puts "Large-scale reasoning: #{new_atoms.size} new atoms in #{duration.total_seconds.round(2)}s"
 
       # Should complete without corruption
-      atomspace.size.should be >= 1000
+      # The test creates ~334 ConceptNodes and ~333 PredicateNodes (667 nodes total)
+      # plus InheritanceLinks (some may be duplicates due to random sampling)
+      # So we expect at least 667 atoms (the guaranteed unique nodes)
+      atomspace.size.should be >= 667
     end
   end
 

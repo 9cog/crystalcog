@@ -187,9 +187,9 @@ module CogUtil
       puts "Press Ctrl+C to stop early"
       
       # Example profiling - in real usage, this would profile the actual application
-      start_time = Time.monotonic
+      start_time = Time.instant
       
-      while (Time.monotonic - start_time).total_seconds < duration
+      while (Time.instant - start_time).total_seconds < duration
         # Simulate some work to profile
         PerformanceProfiler.profile("example_computation") do
           result = 0
@@ -529,10 +529,10 @@ module CogUtil
       # Mock benchmark - in real implementation, this would run actual AtomSpace operations
       total_time = 0.0
       iterations.times do |i|
-        start = Time.monotonic
+        start = Time.instant
         # Simulate AtomSpace operations
         sleep 0.001.seconds
-        total_time += (Time.monotonic - start).total_seconds
+        total_time += (Time.instant - start).total_seconds
         
         if @verbose && (i + 1) % (iterations // 10) == 0
           progress = ((i + 1).to_f / iterations * 100).round(1)

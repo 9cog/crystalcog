@@ -585,7 +585,7 @@ module AtomSpace
       # Add cache statistics if enabled
       if @enable_cache
         cache_stats = @lru_cache.stats
-        stats["cache_size"] = cache_stats["size"].as(UInt64).to_i64
+        stats["cache_size"] = cache_stats["size"].as(Int32).to_i64
         stats["cache_hits"] = cache_stats["hits"].as(UInt64).to_i64
         stats["cache_misses"] = cache_stats["misses"].as(UInt64).to_i64
       end
@@ -594,7 +594,7 @@ module AtomSpace
       stats["partition_cache_enabled"] = @enable_partition_cache ? "true" : "false"
       if @enable_partition_cache
         pcache_stats = @partition_info_cache.stats
-        stats["partition_cache_size"] = pcache_stats["size"].as(UInt64).to_i64
+        stats["partition_cache_size"] = pcache_stats["size"].as(Int32).to_i64
         stats["partition_cache_hits"] = pcache_stats["hits"].as(UInt64).to_i64
         stats["partition_cache_misses"] = pcache_stats["misses"].as(UInt64).to_i64
       end

@@ -79,13 +79,13 @@ module AtomSpace
     def tensor_field_encoding(encoding_type : String = "prime", include_attention : Bool = true,
                              include_meta_level : Bool = false, normalization : String = "none") : Array(Float32)
 
-      start_time = Time.monotonic
+      start_time = Time.instant
       cache_key = "#{encoding_type}_#{include_attention}_#{include_meta_level}_#{normalization}_#{@tensor_shape.hash}"
 
       # Check cache first
       cached_result = @tensor_cache[cache_key]
       if cached_result
-        record_operation("tensor_field_encoding", (Time.monotonic - start_time).total_milliseconds, true)
+        record_operation("tensor_field_encoding", (Time.instant - start_time).total_milliseconds, true)
         return cached_result
       end
 
@@ -136,7 +136,7 @@ module AtomSpace
       # Cache the result
       @tensor_cache[cache_key] = normalized
 
-      duration_ms = (Time.monotonic - start_time).total_milliseconds
+      duration_ms = (Time.instant - start_time).total_milliseconds
       record_operation("tensor_field_encoding", duration_ms, false)
 
       CogUtil::Logger.debug("Generated tensor field encoding: type=#{encoding_type}, size=#{normalized.size}, duration=#{duration_ms.round(2)}ms")
@@ -170,7 +170,7 @@ module AtomSpace
 
     # Create hypergraph-aware tensor encoding with caching
     def hypergraph_tensor_encoding : Array(Float32)
-      start_time = Time.monotonic
+      start_time = Time.instant
 
       # Get AtomSpace metrics with caching
       metrics_key = "atomspace_metrics_#{@atomspace.size}"
@@ -195,7 +195,7 @@ module AtomSpace
       # Combined encoding
       result = base_encoding + hypergraph_factors
 
-      duration_ms = (Time.monotonic - start_time).total_milliseconds
+      duration_ms = (Time.instant - start_time).total_milliseconds
       record_operation("hypergraph_tensor_encoding", duration_ms, cached_metrics != nil)
 
       result

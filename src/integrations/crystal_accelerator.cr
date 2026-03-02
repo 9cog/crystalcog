@@ -191,11 +191,11 @@ module CrystalAccelerator
     
     # Execute accelerated operation with timing
     def execute_accelerated(operation_name : String, &block)
-      start_time = Time.monotonic
+      start_time = Time.instant
       
       result = yield
       
-      duration = (Time.monotonic - start_time).total_milliseconds
+      duration = (Time.instant - start_time).total_milliseconds
       @profiler.record_timing(operation_name, duration)
       
       CogUtil::Logger.debug("Executed #{operation_name} in #{duration}ms")

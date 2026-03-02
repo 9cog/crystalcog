@@ -234,9 +234,9 @@ module AgentZero
       broadcast_message(request_message)
 
       # Wait for responses with timeout
-      start_time = Time.monotonic
+      start_time = Time.instant
       while received_results.size < expected_responses.size &&
-            (Time.monotonic - start_time).total_seconds < timeout_seconds
+            (Time.instant - start_time).total_seconds < timeout_seconds
         sleep 0.1.seconds
       end
 
@@ -377,12 +377,12 @@ module AgentZero
         query = message.payload["query"].as_s
         reasoning_id = message.payload["reasoning_id"].as_s
 
-        start_time = Time.monotonic
+        start_time = Time.instant
 
         # Perform local reasoning using cognitive kernel
         result = perform_local_reasoning(query)
 
-        reasoning_time = (Time.monotonic - start_time).total_milliseconds
+        reasoning_time = (Time.instant - start_time).total_milliseconds
 
         response = Message.new("collaborative_reasoning_response", @id, {
           "reasoning_id" => reasoning_id,
