@@ -14,8 +14,8 @@ CrystalCog is a **complete rewrite of the OpenCog AI framework** in the Crystal 
 
 | Metric | Value |
 |--------|-------|
-| Total Source Lines of Code | ~26,000+ |
-| Test Lines of Code | ~10,800+ |
+| Total Source Lines of Code | ~44,000+ |
+| Test Lines of Code | ~16,500+ |
 | Test Pass Rate | 99%+ (178/180) |
 | Components Implemented | 24 major modules |
 | Storage Backends | 6 (File, SQLite, PostgreSQL, RocksDB, Network, Distributed) |
@@ -288,7 +288,7 @@ CrystalCog has completed all 7 phases of development as specified in the roadmap
 
 CrystalCog represents a **complete, production-ready implementation** of the OpenCog AI framework. With all 7 development phases completed:
 
-- **26,000+ lines** of well-tested code
+- **44,000+ lines** of well-tested code
 - **99% test pass rate**
 - **Full feature parity** with OpenCog C++ and beyond
 - **Enhanced performance** (145x improvement for bulk operations)
