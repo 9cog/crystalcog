@@ -133,7 +133,7 @@ module AgentZero
       return CollaborativeReasoningResult.new(query, [] of CollaborativeResult, 0.0) if selected_agents.empty?
 
       all_results = [] of CollaborativeResult
-      reasoning_start = Time.monotonic
+      reasoning_start = Time.instant
 
       # Execute reasoning on selected agents in parallel
       channel = Channel(Array(CollaborativeResult)).new
@@ -154,7 +154,7 @@ module AgentZero
       # Calculate consensus confidence
       consensus_confidence = calculate_consensus_confidence(all_results)
 
-      reasoning_time = (Time.monotonic - reasoning_start).total_milliseconds
+      reasoning_time = (Time.instant - reasoning_start).total_milliseconds
 
       CogUtil::Logger.info("Network collaborative reasoning completed: #{all_results.size} results, " \
                           "consensus: #{consensus_confidence.round(3)}, time: #{reasoning_time.round(1)}ms")

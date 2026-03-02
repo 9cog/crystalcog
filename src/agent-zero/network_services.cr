@@ -521,7 +521,7 @@ module AgentZero
       @active_tasks[task.id] = execution
 
       execution.status = TaskStatus::Running
-      start_time = Time.monotonic
+      start_time = Time.instant
 
       # Execute task on selected agents
       begin
@@ -543,7 +543,7 @@ module AgentZero
         CogUtil::Logger.error("Task execution failed: #{ex.message}")
       end
 
-      execution_time = (Time.monotonic - start_time).total_milliseconds
+      execution_time = (Time.instant - start_time).total_milliseconds
 
       # Create result
       result = TaskExecutionResult.new(

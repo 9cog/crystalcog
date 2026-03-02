@@ -679,7 +679,7 @@ module URE
 
     # Adaptive mixed inference with strategy selection
     def adaptive_chain(goal : AtomSpace::Atom, max_time : Float64 = 30.0) : Array(AtomSpace::Atom)
-      start_time = Time.monotonic
+      start_time = Time.instant
       initial_confidence = goal.truth_value.confidence
       
       # Select optimal strategy based on historical performance
@@ -689,7 +689,7 @@ module URE
       results = execute_strategy(selected_strategy, goal, max_time)
       
       # Record performance metrics
-      elapsed_time = (Time.monotonic - start_time).total_seconds
+      elapsed_time = (Time.instant - start_time).total_seconds
       record_performance(selected_strategy, results, elapsed_time, goal, initial_confidence)
       
       results
@@ -814,13 +814,13 @@ module URE
     end
 
     private def execute_mixed_forward_first(goal : AtomSpace::Atom, max_time : Float64) : Array(AtomSpace::Atom)
-      start_time = Time.monotonic
+      start_time = Time.instant
       
       # Forward phase (60% of time budget)
       forward_time_budget = max_time * 0.6
       forward_results = @forward_chainer.run
       
-      elapsed = (Time.monotonic - start_time).total_seconds
+      elapsed = (Time.instant - start_time).total_seconds
       remaining_time = max_time - elapsed
       
       # Backward phase with remaining time
@@ -833,12 +833,12 @@ module URE
     end
 
     private def execute_mixed_backward_first(goal : AtomSpace::Atom, max_time : Float64) : Array(AtomSpace::Atom)
-      start_time = Time.monotonic
+      start_time = Time.instant
       
       # Backward phase (60% of time budget)
       backward_results = @backward_chainer.do_chain(goal)
       
-      elapsed = (Time.monotonic - start_time).total_seconds
+      elapsed = (Time.instant - start_time).total_seconds
       remaining_time = max_time - elapsed
       
       # Forward phase with remaining time
@@ -852,7 +852,7 @@ module URE
     end
 
     private def execute_adaptive_bidirectional(goal : AtomSpace::Atom, max_time : Float64) : Array(AtomSpace::Atom)
-      start_time = Time.monotonic
+      start_time = Time.instant
       forward_results = [] of AtomSpace::Atom
       backward_results = [] of AtomSpace::Atom
       
@@ -860,15 +860,15 @@ module URE
       time_per_phase = max_time / 6.0  # 3 forward + 3 backward phases
       
       3.times do |phase|
-        break if (Time.monotonic - start_time).total_seconds >= max_time
+        break if (Time.instant - start_time).total_seconds >= max_time
         
         # Forward step
-        phase_start = Time.monotonic
+        phase_start = Time.instant
         step_results = @forward_chainer.step_forward
         forward_results.concat(step_results)
         
         # Backward step
-        elapsed_phase = (Time.monotonic - phase_start).total_seconds
+        elapsed_phase = (Time.instant - phase_start).total_seconds
         if elapsed_phase < time_per_phase
           step_backward_results = @backward_chainer.do_chain(goal)
           backward_results.concat(step_backward_results)
@@ -877,7 +877,7 @@ module URE
           break if backward_results.any? { |atom| atoms_unify?(atom, goal) }
         end
         
-        break if (Time.monotonic - start_time).total_seconds >= max_time
+        break if (Time.instant - start_time).total_seconds >= max_time
       end
       
       (forward_results + backward_results).uniq
