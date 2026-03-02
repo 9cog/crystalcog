@@ -44,26 +44,26 @@ module CogUtil
     # Profile session storing collected metrics
     class Session
       @metrics : Hash(String, Metrics)
-      @start_time : Time::Span
+      @start_time : Time::Instant
       @memory_baseline : UInt64
-      @active_profiles : Hash(String, Time::Span)
+      @active_profiles : Hash(String, Time::Instant)
       
       def initialize
         @metrics = Hash(String, Metrics).new
-        @start_time = Time.monotonic
+        @start_time = Time.instant
         @memory_baseline = get_memory_usage
-        @active_profiles = Hash(String, Time::Span).new
+        @active_profiles = Hash(String, Time::Instant).new
       end
       
       def start_profile(name : String)
-        @active_profiles[name] = Time.monotonic
+        @active_profiles[name] = Time.instant
         unless @metrics.has_key?(name)
           @metrics[name] = Metrics.new
         end
       end
       
       def end_profile(name : String)
-        end_time = Time.monotonic
+        end_time = Time.instant
         if start_time = @active_profiles.delete(name)
           metrics = @metrics[name]
           duration = (end_time - start_time).total_seconds
@@ -95,7 +95,7 @@ module CogUtil
       end
       
       def session_duration : Float64
-        (Time.monotonic - @start_time).total_seconds
+        (Time.instant - @start_time).total_seconds
       end
       
       private def get_memory_usage : UInt64
@@ -130,7 +130,7 @@ module CogUtil
       session = @@current_session.not_nil!
       
       session.start_profile(name)
-      start_time = Time.monotonic
+      start_time = Time.instant
       gc_stats_before = GC.stats
       
       begin
