@@ -885,19 +885,19 @@ module CrystalCog
           <h2>Quick Start</h2>
           <pre><code>npm install @crystalcog/sdk
 
-import { CrystalCogClient } from '@crystalcog/sdk';
+        import { CrystalCogClient } from '@crystalcog/sdk';
 
-const client = new CrystalCogClient('http://localhost:#{@config.port}');
+        const client = new CrystalCogClient('http://localhost:#{@config.port}');
 
-// Create an atom
-const atom = await client.createAtom({
-  type: 'ConceptNode',
-  name: 'Dog'
-});
+        // Create an atom
+        const atom = await client.createAtom({
+          type: 'ConceptNode',
+          name: 'Dog'
+        });
 
-// Query atoms
-const results = await client.query({ pattern: 'Dog' });
-</code></pre>
+        // Query atoms
+        const results = await client.query({ pattern: 'Dog' });
+        </code></pre>
 
           <h2>REST API Endpoints</h2>
 
@@ -954,14 +954,14 @@ const results = await client.query({ pattern: 'Dog' });
 
           <h3>Message Types</h3>
           <pre><code>// Subscribe to atom changes
-{ "type": "subscribe", "channel": "atoms" }
+        { "type": "subscribe", "channel": "atoms" }
 
-// Query
-{ "type": "query", "payload": { "pattern": "Dog" } }
+        // Query
+        { "type": "query", "payload": { "pattern": "Dog" } }
 
-// Mutation
-{ "type": "mutation", "payload": { "action": "add", "atom": {...} } }
-</code></pre>
+        // Mutation
+        { "type": "mutation", "payload": { "action": "add", "atom": {...} } }
+        </code></pre>
 
           <h2>OpenAPI Spec</h2>
           <p><a href="#{@config.api_prefix}/openapi.json">Download OpenAPI 3.0 specification</a></p>
