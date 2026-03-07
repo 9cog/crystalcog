@@ -53,6 +53,25 @@ describe Robotics do
       pitch.should be_close(0.2, 0.01)
       yaw.should be_close(0.3, 0.01)
     end
+
+    it "multiplies two quaternions (identity * q == q)" do
+      identity = Robotics::MessageTypes::Quaternion.new(0.0, 0.0, 0.0, 1.0)
+      q = Robotics::MessageTypes::Quaternion.from_euler(0.1, 0.2, 0.3)
+
+      result = identity * q
+      result.x.should be_close(q.x, 0.001)
+      result.y.should be_close(q.y, 0.001)
+      result.z.should be_close(q.z, 0.001)
+      result.w.should be_close(q.w, 0.001)
+    end
+
+    it "multiplies two 90-degree yaw rotations to give 180-degree yaw" do
+      q90 = Robotics::MessageTypes::Quaternion.from_euler(0.0, 0.0, Math::PI / 2)
+      q180 = q90 * q90
+
+      _, _, yaw = q180.to_euler
+      yaw.should be_close(Math::PI, 0.01)
+    end
   end
 
   describe Robotics::Transform do
@@ -81,6 +100,21 @@ describe Robotics do
       inv = tf.inverse
       inv.frame_id.should eq("base_link")
       inv.child_frame_id.should eq("world")
+    end
+
+    it "composes two pure-translation transforms" do
+      tf1 = Robotics::Transform.new("world", "base_link", Spatial::Vector3.new(1.0, 0.0, 0.0))
+      tf2 = Robotics::Transform.new("base_link", "arm",   Spatial::Vector3.new(0.0, 2.0, 0.0))
+
+      composed = tf1.compose(tf2)
+      composed.frame_id.should eq("world")
+      composed.child_frame_id.should eq("arm")
+
+      point = Spatial::Vector3.new(0.0, 0.0, 0.0)
+      result = composed.apply(point)
+      result.x.should be_close(1.0, 0.01)
+      result.y.should be_close(2.0, 0.01)
+      result.z.should be_close(0.0, 0.01)
     end
   end
 
@@ -115,6 +149,112 @@ describe Robotics do
 
       buffer.can_transform("world", "base_link").should be_true
       buffer.can_transform("world", "camera").should be_false
+    end
+
+    it "resolves a two-hop transform chain" do
+      buffer = Robotics::TransformBuffer.new
+
+      # world -> base_link (pure translation +1 on X)
+      tf_wb = Robotics::Transform.new(
+        "world", "base_link",
+        Spatial::Vector3.new(1.0, 0.0, 0.0)
+      )
+      # base_link -> arm (pure translation +2 on Y)
+      tf_ba = Robotics::Transform.new(
+        "base_link", "arm",
+        Spatial::Vector3.new(0.0, 2.0, 0.0)
+      )
+
+      buffer.set_transform(tf_wb)
+      buffer.set_transform(tf_ba)
+
+      # Should resolve world -> arm through the chain
+      result = buffer.lookup_transform("world", "arm")
+      result.should_not be_nil
+
+      # A zero-vector in arm frame should map to (1, 2, 0) in world frame
+      point = Spatial::Vector3.new(0.0, 0.0, 0.0)
+      world_point = result.not_nil!.apply(point)
+      world_point.x.should be_close(1.0, 0.01)
+      world_point.y.should be_close(2.0, 0.01)
+      world_point.z.should be_close(0.0, 0.01)
+    end
+
+    it "resolves a three-hop transform chain" do
+      buffer = Robotics::TransformBuffer.new
+
+      # world -> robot (+1 X)
+      buffer.set_transform(Robotics::Transform.new(
+        "world", "robot",
+        Spatial::Vector3.new(1.0, 0.0, 0.0)
+      ))
+      # robot -> arm (+2 Y)
+      buffer.set_transform(Robotics::Transform.new(
+        "robot", "arm",
+        Spatial::Vector3.new(0.0, 2.0, 0.0)
+      ))
+      # arm -> hand (+3 Z)
+      buffer.set_transform(Robotics::Transform.new(
+        "arm", "hand",
+        Spatial::Vector3.new(0.0, 0.0, 3.0)
+      ))
+
+      result = buffer.lookup_transform("world", "hand")
+      result.should_not be_nil
+
+      point = Spatial::Vector3.new(0.0, 0.0, 0.0)
+      world_point = result.not_nil!.apply(point)
+      world_point.x.should be_close(1.0, 0.01)
+      world_point.y.should be_close(2.0, 0.01)
+      world_point.z.should be_close(3.0, 0.01)
+    end
+
+    it "resolves chain in reverse direction" do
+      buffer = Robotics::TransformBuffer.new
+
+      # Store: world -> base_link, base_link -> sensor
+      buffer.set_transform(Robotics::Transform.new(
+        "world", "base_link",
+        Spatial::Vector3.new(5.0, 0.0, 0.0)
+      ))
+      buffer.set_transform(Robotics::Transform.new(
+        "base_link", "sensor",
+        Spatial::Vector3.new(0.0, 1.0, 0.0)
+      ))
+
+      # Resolve sensor -> world (fully inverse chain)
+      result = buffer.lookup_transform("sensor", "world")
+      result.should_not be_nil
+
+      # sensor origin is at (5, 1, 0) in world; applying the world→sensor transform
+      # to that world-frame point should yield (0, 0, 0) in sensor coordinates
+      point = Spatial::Vector3.new(5.0, 1.0, 0.0)
+      sensor_point = result.not_nil!.apply(point)
+      sensor_point.x.should be_close(0.0, 0.01)
+      sensor_point.y.should be_close(0.0, 0.01)
+      sensor_point.z.should be_close(0.0, 0.01)
+    end
+
+    it "can_transform returns true for chained frames" do
+      buffer = Robotics::TransformBuffer.new
+
+      buffer.set_transform(Robotics::Transform.new("world", "base_link"))
+      buffer.set_transform(Robotics::Transform.new("base_link", "camera"))
+
+      buffer.can_transform("world", "camera").should be_true
+      buffer.can_transform("camera", "world").should be_true
+      buffer.can_transform("world", "unknown").should be_false
+    end
+
+    it "returns nil for disconnected frames" do
+      buffer = Robotics::TransformBuffer.new
+
+      # Two disconnected graph components
+      buffer.set_transform(Robotics::Transform.new("world", "base_link"))
+      buffer.set_transform(Robotics::Transform.new("map", "odom"))
+
+      buffer.lookup_transform("world", "odom").should be_nil
+      buffer.can_transform("world", "odom").should be_false
     end
   end
 
