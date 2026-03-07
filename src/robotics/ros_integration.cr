@@ -172,6 +172,16 @@ module Robotics
         io.to_slice
       end
 
+      def *(other : Quaternion) : Quaternion
+        # Hamilton product for quaternion composition
+        Quaternion.new(
+          @w * other.x + @x * other.w + @y * other.z - @z * other.y,
+          @w * other.y - @x * other.z + @y * other.w + @z * other.x,
+          @w * other.z + @x * other.y - @y * other.x + @z * other.w,
+          @w * other.w - @x * other.x - @y * other.y - @z * other.z
+        )
+      end
+
       def message_type : String
         "geometry_msgs/Quaternion"
       end
@@ -546,6 +556,14 @@ module Robotics
       Transform.new(@child_frame_id, @frame_id, inv_translation, inv_rotation, @timestamp)
     end
 
+    # Compose this transform with another: self (A→B) followed by other (B→C) gives A→C.
+    # The resulting transform converts points from C's frame into A's frame.
+    def compose(other : Transform) : Transform
+      combined_rotation = @rotation * other.rotation
+      combined_translation = rotate_by_quaternion(other.translation, @rotation) + @translation
+      Transform.new(@frame_id, other.child_frame_id, combined_translation, combined_rotation, @timestamp)
+    end
+
     private def rotate_by_quaternion(v : Spatial::Vector3, q : MessageTypes::Quaternion) : Spatial::Vector3
       # Quaternion rotation: q * v * q^-1
       u = Spatial::Vector3.new(q.x, q.y, q.z)
@@ -585,7 +603,61 @@ module Robotics
         return tf.inverse
       end
 
-      # TODO: Implement transform chain resolution
+      # Chain resolution via BFS over the transform graph
+      find_transform_chain(target_frame, source_frame)
+    end
+
+    # BFS through the frame graph to find a chain from source_frame to target_frame.
+    # Each stored transform has frame_id=parent and child_frame_id=child and converts
+    # points in child's coordinate system to parent's coordinate system (tf.apply(p_child)
+    # = p_parent).  The accumulated transform at each BFS node converts points in that
+    # node's frame into the target_frame, matching the semantics of the direct lookups.
+    private def find_transform_chain(target_frame : String, source_frame : String) : Transform?
+      # Identity: any frame transforms to itself with no displacement
+      if source_frame == target_frame
+        return Transform.new(target_frame, source_frame)
+      end
+
+      # Build adjacency.  An edge (A → B, T) satisfies T.apply(p_A) = p_B.
+      adj = Hash(String, Array(Tuple(String, Transform))).new { |h, k| h[k] = [] of Tuple(String, Transform) }
+
+      @transforms.each do |key, tf|
+        parent = key[0]  # tf.frame_id
+        child  = key[1]  # tf.child_frame_id
+        # tf.apply(p_child) = p_parent  →  edge child → parent uses tf
+        adj[child]  << {parent, tf}
+        # tf.inverse.apply(p_parent) = p_child  →  edge parent → child uses tf.inverse
+        adj[parent] << {child, tf.inverse}
+      end
+
+      # BFS.  `accumulated` at current_frame is the transform that converts p_source → p_current.
+      # When stepping to next_frame via `edge` (edge.apply(p_current) = p_next), the new
+      # accumulated is edge ∘ accumulated, i.e. edge.compose(accumulated).
+      visited = Set(String).new
+      queue   = Deque({String, Transform?}).new
+      queue.push({source_frame, nil})
+      visited.add(source_frame)
+
+      while !queue.empty?
+        current_frame, accumulated = queue.shift
+
+        adj[current_frame].each do |(next_frame, edge)|
+          next if visited.includes?(next_frame)
+
+          # edge.compose(accumulated) gives edge ∘ accumulated:
+          # accumulated converts source → current; edge converts current → next;
+          # the composition converts source → next, which is what we accumulate.
+          composed = accumulated ? edge.compose(accumulated) : edge
+
+          if next_frame == target_frame
+            return composed
+          end
+
+          visited.add(next_frame)
+          queue.push({next_frame, composed})
+        end
+      end
+
       nil
     end
 
