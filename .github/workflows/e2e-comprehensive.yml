@@ -468,7 +468,7 @@ jobs:
       run: |
         echo "=== Testing Reasoning Integration ==="
         # Create integration test
-        cat > /tmp/reasoning_integration.cr << 'EOF'
+        cat > ci_reasoning_integration.cr << 'EOF'
         require "./src/crystalcog"
 
         puts "=== Reasoning Integration Test ==="
@@ -508,7 +508,7 @@ jobs:
         puts "=== Integration Test Passed ==="
         EOF
 
-        timeout 60 crystal run /tmp/reasoning_integration.cr || echo "Reasoning integration test completed"
+        timeout 60 crystal run ci_reasoning_integration.cr
 
   # Persistence E2E Tests
   persistence-e2e:
@@ -536,41 +536,73 @@ jobs:
       run: |
         echo "=== Testing SQLite Storage ==="
 
-        cat > /tmp/sqlite_test.cr << 'EOF'
+        cat > ci_sqlite_test.cr << 'EOF'
+
         require "./src/atomspace/atomspace"
+
         require "./src/atomspace/storage"
+
 
         puts "Testing SQLite persistence..."
 
+
         atomspace = AtomSpace::AtomSpace.new
 
+
         # Create some atoms
+
         dog = atomspace.add_concept_node("dog")
+
         animal = atomspace.add_concept_node("animal")
+
         atomspace.add_inheritance_link(dog, animal)
+
 
         puts "Created #{atomspace.size} atoms"
 
+
         # Test storage operations
-        storage = AtomSpace::Storage.new("/tmp/test_atomspace.db")
-        storage.save(atomspace)
+
+        db_path = "/tmp/test_atomspace_#{Process.pid}.db"
+
+        storage = AtomSpace::SQLiteStorageNode.new("ci-sqlite", db_path)
+
+        raise "could not open #{db_path}" unless storage.open
+
+        raise "store_atomspace failed" unless storage.store_atomspace(atomspace)
+
         puts "Saved atomspace to SQLite"
 
+
         # Load into new atomspace
+
         atomspace2 = AtomSpace::AtomSpace.new
-        storage.load(atomspace2)
+
+        raise "load_atomspace failed" unless storage.load_atomspace(atomspace2)
+
+        storage.close
+
+        File.delete(db_path) if File.exists?(db_path)
+
         puts "Loaded #{atomspace2.size} atoms from SQLite"
 
+
         # Verify
+
         if atomspace.size == atomspace2.size
+
           puts "SQLite storage test PASSED"
+
         else
+
           puts "SQLite storage test FAILED"
+
           exit 1
+
         end
         EOF
 
-        timeout 30 crystal run /tmp/sqlite_test.cr || echo "SQLite test completed with issues"
+        timeout 60 crystal run ci_sqlite_test.cr
 
     - name: Test Distributed Storage
       run: |
@@ -613,7 +645,7 @@ jobs:
       run: |
         echo "=== Running Benchmarks ==="
 
-        cat > /tmp/benchmark.cr << 'EOF'
+        cat > ci_benchmark.cr << 'EOF'
         require "./src/atomspace/atomspace"
         require "benchmark"
 
@@ -651,8 +683,8 @@ jobs:
         puts "Rate: #{(10000 / duration.total_seconds).round(0)} nodes/second"
         EOF
 
-        timeout 120 crystal run --release /tmp/benchmark.cr > benchmark_results.txt 2>&1
-        cat benchmark_results.txt
+        set -o pipefail
+        timeout 120 crystal run --release ci_benchmark.cr 2>&1 | tee benchmark_results.txt
 
     - name: Upload benchmark results
       uses: actions/upload-artifact@v4
@@ -690,7 +722,7 @@ jobs:
 
         for result in "${{ needs.cogserver-e2e.result }}" "${{ needs.distributed-e2e.result }}" "${{ needs.nlp-e2e.result }}" "${{ needs.reasoning-e2e.result }}" "${{ needs.persistence-e2e.result }}" "${{ needs.performance-e2e.result }}"; do
           if [ "$result" = "success" ]; then
-            ((SUCCESS_COUNT++))
+            SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
           fi
         done
 

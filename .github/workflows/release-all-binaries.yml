@@ -140,10 +140,10 @@ jobs:
           if [ -f "$source" ]; then
             if crystal build --verbose --stats $BUILD_FLAGS "$source" -o "$output" 2>&1; then
               echo "  ✓ $target built successfully"
-              ((SUCCESS++))
+              SUCCESS=$((SUCCESS + 1))
             else
               echo "  ✗ $target build failed"
-              ((FAILED++))
+              FAILED=$((FAILED + 1))
             fi
           else
             echo "  ⚠ Source file $source not found, skipping"

@@ -296,10 +296,10 @@ run_integration_tests() {
             print_status "Running $test_file..."
             if crystal run --error-trace "$test_file"; then
                 print_success "$test_file passed"
-                ((passed++))
+                passed=$((passed + 1))
             else
                 print_error "$test_file failed"
-                ((failed++))
+                failed=$((failed + 1))
             fi
         fi
     done

@@ -390,14 +390,14 @@ jobs:
           if [ -f "$source" ]; then
             if crystal build --verbose --stats --error-trace "$source" -o "bin/$target" 2>&1; then
               echo "  ✓ $target built successfully"
-              ((SUCCESS_COUNT++))
+              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
             else
               echo "  ✗ $target build failed"
-              ((FAIL_COUNT++))
+              FAIL_COUNT=$((FAIL_COUNT + 1))
             fi
           else
             echo "  ⚠ Source file $source not found"
-            ((FAIL_COUNT++))
+            FAIL_COUNT=$((FAIL_COUNT + 1))
           fi
         done
 
