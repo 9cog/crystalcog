@@ -12,6 +12,10 @@ on:
     branches: [main]
   schedule:
     - cron: '0 6 * * 6'  # Every Saturday 6 AM
+# Least-privilege token by default; jobs that write declare their own permissions.
+permissions:
+  contents: read
+
 # Trace every command so CI logs show exactly what ran and what it printed.
 defaults:
   run:

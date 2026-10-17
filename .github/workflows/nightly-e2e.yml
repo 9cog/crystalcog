@@ -22,6 +22,10 @@ env:
   CRYSTAL_VERSION: '1.20.1'
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+# Least-privilege token by default; jobs that write declare their own permissions.
+permissions:
+  contents: read
+
 # Trace every command so CI logs show exactly what ran and what it printed.
 defaults:
   run:

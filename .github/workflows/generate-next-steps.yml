@@ -19,6 +19,10 @@ on:
 env:
   ROADMAP_FILE: ${{ inputs.roadmap_file || 'docs/agent-zero/AGENT-ZERO-GENESIS.md' }}
 
+# Least-privilege token by default; jobs that write declare their own permissions.
+permissions:
+  contents: read
+
 # Trace every command so CI logs show exactly what ran and what it printed.
 defaults:
   run:

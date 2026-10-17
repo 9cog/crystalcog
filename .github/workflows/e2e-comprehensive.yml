@@ -40,6 +40,10 @@ env:
   COGSERVER_PORT: 18080
   COGSERVER_TIMEOUT: 60
 
+# Least-privilege token by default; jobs that write declare their own permissions.
+permissions:
+  contents: read
+
 # Trace every command so CI logs show exactly what ran and what it printed.
 defaults:
   run:
