@@ -54,6 +54,8 @@ jobs:
       if: runner.os == 'macOS'
       run: |
         brew install sqlite3 rocksdb libevent openssl
+        # Homebrew libraries are not on the default linker path on Apple Silicon
+        echo "LIBRARY_PATH=$(brew --prefix)/lib${LIBRARY_PATH:+:$LIBRARY_PATH}" >> "$GITHUB_ENV"
 
     - name: Install dependencies
       run: shards install --verbose --production

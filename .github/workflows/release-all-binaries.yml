@@ -60,6 +60,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y \
           libsqlite3-dev \
+          librocksdb-dev \
           libevent-dev \
           libssl-dev \
           libgmp-dev \
@@ -261,7 +262,9 @@ jobs:
 
     - name: Install system dependencies
       run: |
-        brew install sqlite3 libevent openssl gmp libyaml pcre2
+        brew install sqlite3 rocksdb libevent openssl gmp libyaml pcre2
+        # Homebrew libraries are not on the default linker path on Apple Silicon
+        echo "LIBRARY_PATH=$(brew --prefix)/lib${LIBRARY_PATH:+:$LIBRARY_PATH}" >> "$GITHUB_ENV"
 
     - name: Install dependencies
       run: shards install --verbose --production
@@ -340,7 +343,9 @@ jobs:
 
     - name: Install system dependencies
       run: |
-        brew install sqlite3 libevent openssl gmp libyaml pcre2
+        brew install sqlite3 rocksdb libevent openssl gmp libyaml pcre2
+        # Homebrew libraries are not on the default linker path on Apple Silicon
+        echo "LIBRARY_PATH=$(brew --prefix)/lib${LIBRARY_PATH:+:$LIBRARY_PATH}" >> "$GITHUB_ENV"
 
     - name: Install dependencies
       run: shards install --verbose --production

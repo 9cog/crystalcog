@@ -72,7 +72,7 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libsqlite3-dev libevent-dev libssl-dev libgmp-dev libyaml-dev libpcre2-dev
+        sudo apt-get install -y libsqlite3-dev librocksdb-dev libevent-dev libssl-dev libgmp-dev libyaml-dev libpcre2-dev
 
     - name: Install dependencies
       run: shards install --verbose
@@ -292,7 +292,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libsqlite3-dev libevent-dev libssl-dev
+        sudo apt-get install -y libsqlite3-dev librocksdb-dev libevent-dev libssl-dev
         shards install --verbose
 
     - name: Download binaries
@@ -344,7 +344,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libsqlite3-dev libevent-dev libssl-dev
+        sudo apt-get install -y libsqlite3-dev librocksdb-dev libevent-dev libssl-dev
         shards install --verbose
 
     - name: Download binaries
@@ -418,7 +418,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libsqlite3-dev libevent-dev libssl-dev
+        sudo apt-get install -y libsqlite3-dev librocksdb-dev libevent-dev libssl-dev
         shards install --verbose
 
     - name: Test PLN Reasoning
@@ -516,7 +516,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libsqlite3-dev libevent-dev libssl-dev libpq-dev
+        sudo apt-get install -y libsqlite3-dev librocksdb-dev libevent-dev libssl-dev libpq-dev
         shards install --verbose
 
     - name: Test SQLite Storage
@@ -583,7 +583,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libsqlite3-dev libevent-dev libssl-dev
+        sudo apt-get install -y libsqlite3-dev librocksdb-dev libevent-dev libssl-dev
         shards install --verbose
 
     - name: Run Performance Specs
