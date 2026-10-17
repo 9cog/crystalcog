@@ -10,7 +10,7 @@ and the reason are recorded here.
 | cogpy | Phase 6-7 modules: genetic programming, simulation, multi-agent communication/coordination, neural-symbolic, self-modification, advanced learning/NLP, robotics navigation/goal planning/ROS bridge, attention forgetting/normalization/query optimizer, production hardening, ~60 specs, e2e harness, priority-issue generator |
 | 9cog | Integration framework in `src/integrations/` (CogPy, PyG, Pygmalion, Galatea, Paphos, Neo4j, IPFS, MeTTa, TypeScript SDK) and the `crystalcog integration` command |
 | EchoCog | Organized layout for docs, demos and standalone tests: `docs/{api,features,guides,reports,agent-zero,guix}`, `examples/crystal/`, `spec/standalone/`, `scripts/{demos,testing}/`, `tools/`; the roadmap-to-issues generator (`generate-next-steps.yml`, `.github/scripts/roadmap-parser.js`) |
-| rzonedevops | Agent persona definitions in `.github/agents/` |
+| rzonedevops | Agent persona definitions in `.github/agents/`; `examples/crystal/opencog_complete_demo.cr` (end-to-end demo) and `docs/OPENCOG_CRYSTAL_IMPLEMENTATION.md` |
 
 ## Overlap resolutions
 
@@ -62,3 +62,30 @@ and the reason are recorded here.
   and Rust CI workflows, `docker/archive/`, `rest-api-documentation/`): cogpy
   removed these in its "Clean up repository for pure Crystal implementation"
   change, and this tree follows that cleanup.
+
+## Inventory
+
+Every file on each variant's `main`, classified against this tree:
+
+| Variant | Files | Same content | Updated in place | Moved | Not carried over |
+| --- | --- | --- | --- | --- | --- |
+| o9nn | 640 | 521 | 116 | 0 | 3 |
+| cogpy | 895 | 859 | 34 | 1 | 1 |
+| 9cog | 645 | 497 | 144 | 1 | 3 |
+| EchoCog | 693 | 402 | 133 | 43 | 115 |
+| rzonedevops | 715 | 371 | 113 | 113 | 116 |
+
+"Updated in place" means a newer version from another variant replaced it;
+"moved" means the same file lives at a new path (EchoCog's organized layout).
+What is not carried over:
+
+- o9nn, 9cog: `multi-platform-build.yml` (C++ pipeline, see above) and two
+  `*.spec.cr.skip` stubs whose specs now run as `attention_spec.cr` and
+  `error_handling_spec.cr`.
+- cogpy: `multi-platform-build.yml`.
+- EchoCog, rzonedevops: C/C++/Rust scaffolding (`CMakeLists.txt`,
+  `Cargo.toml`, `src/agent-zero/*.c`, `requirements.txt`, `.idx/dev.nix`),
+  C++ OpenCog and Rust CI workflows, Cargo/workflow generator scripts,
+  `docker/archive/`, `rest-api-documentation/` (Swagger UI around an empty
+  spec for a Python service on `localhost:5000`), a generated
+  `coverage-report.txt`, and rzonedevops' Python/Rust `README` setup note.
