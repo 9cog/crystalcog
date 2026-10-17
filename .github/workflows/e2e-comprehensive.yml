@@ -40,6 +40,11 @@ env:
   COGSERVER_PORT: 18080
   COGSERVER_TIMEOUT: 60
 
+# Trace every command so CI logs show exactly what ran and what it printed.
+defaults:
+  run:
+    shell: bash -ex {0}
+
 jobs:
   # Build all required binaries first
   build-binaries:
@@ -70,29 +75,29 @@ jobs:
         sudo apt-get install -y libsqlite3-dev libevent-dev libssl-dev libgmp-dev libyaml-dev libpcre2-dev
 
     - name: Install dependencies
-      run: shards install
+      run: shards install --verbose
 
     - name: Build E2E binaries
       run: |
         mkdir -p bin
 
         echo "Building main application..."
-        crystal build --error-trace src/bin/crystalcog.cr -o bin/crystalcog
+        crystal build --verbose --stats --error-trace src/bin/crystalcog.cr -o bin/crystalcog
 
         echo "Building CogServer..."
-        crystal build --error-trace src/bin/cogserver.cr -o bin/cogserver
+        crystal build --verbose --stats --error-trace src/bin/cogserver.cr -o bin/cogserver
 
         echo "Building Agent-Zero demo..."
-        crystal build --error-trace src/agent-zero/distributed_network_demo.cr -o bin/distributed_demo || true
+        crystal build --verbose --stats --error-trace src/agent-zero/distributed_network_demo.cr -o bin/distributed_demo || true
 
         echo "Building NLP module..."
-        crystal build --error-trace src/nlp/nlp_main.cr -o bin/nlp || true
+        crystal build --verbose --stats --error-trace src/nlp/nlp_main.cr -o bin/nlp || true
 
         echo "Building Pattern Matching..."
-        crystal build --error-trace src/pattern_matching/pattern_matching_main.cr -o bin/pattern_matching || true
+        crystal build --verbose --stats --error-trace src/pattern_matching/pattern_matching_main.cr -o bin/pattern_matching || true
 
         echo "Building MOSES..."
-        crystal build --error-trace src/moses/moses_main.cr -o bin/moses || true
+        crystal build --verbose --stats --error-trace src/moses/moses_main.cr -o bin/moses || true
 
         ls -lh bin/
 
@@ -140,7 +145,7 @@ jobs:
       run: |
         echo "Waiting for CogServer to be ready..."
         for i in {1..30}; do
-          if curl -s http://localhost:${{ env.COGSERVER_PORT }}/status > /dev/null 2>&1; then
+          if curl -sS http://localhost:${{ env.COGSERVER_PORT }}/status; then
             echo "CogServer is ready after $i attempts"
             break
           fi
@@ -288,7 +293,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y libsqlite3-dev libevent-dev libssl-dev
-        shards install
+        shards install --verbose
 
     - name: Download binaries
       uses: actions/download-artifact@v4
@@ -302,12 +307,12 @@ jobs:
     - name: Run Agent-Zero E2E Tests
       run: |
         echo "=== Running Agent-Zero E2E Tests ==="
-        crystal spec spec/agent-zero/agent_zero_e2e_spec.cr --error-trace --verbose || echo "Agent-Zero E2E tests completed"
+        crystal spec --stats -v spec/agent-zero/agent_zero_e2e_spec.cr --error-trace --verbose || echo "Agent-Zero E2E tests completed"
 
     - name: Run Distributed Cluster Tests
       run: |
         echo "=== Running Distributed Cluster Tests ==="
-        crystal spec spec/atomspace/distributed_cluster_spec.cr --error-trace --verbose || echo "Distributed cluster tests completed"
+        crystal spec --stats -v spec/atomspace/distributed_cluster_spec.cr --error-trace --verbose || echo "Distributed cluster tests completed"
 
     - name: Test Multi-Node Scenarios
       run: |
@@ -340,7 +345,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y libsqlite3-dev libevent-dev libssl-dev
-        shards install
+        shards install --verbose
 
     - name: Download binaries
       uses: actions/download-artifact@v4
@@ -354,7 +359,7 @@ jobs:
     - name: Run NLP Unit Tests
       run: |
         echo "=== Running NLP Unit Tests ==="
-        crystal spec spec/nlp/ --error-trace --verbose
+        crystal spec --stats -v spec/nlp/ --error-trace --verbose
 
     - name: Test NLP Processing Pipeline
       run: |
@@ -375,23 +380,23 @@ jobs:
           cat /tmp/nlp_test_input.txt | timeout 30 ./bin/nlp --process || echo "NLP processing completed"
         else
           echo "NLP binary not available, running spec tests..."
-          crystal spec spec/nlp/text_processor_spec.cr --error-trace
+          crystal spec --stats -v spec/nlp/text_processor_spec.cr --error-trace
         fi
 
     - name: Test Tokenizer
       run: |
         echo "=== Testing Tokenizer ==="
-        crystal spec spec/nlp/tokenizer_spec.cr --error-trace --verbose
+        crystal spec --stats -v spec/nlp/tokenizer_spec.cr --error-trace --verbose
 
     - name: Test Link Grammar
       run: |
         echo "=== Testing Link Grammar ==="
-        crystal spec spec/nlp/link_grammar_spec.cr --error-trace --verbose
+        crystal spec --stats -v spec/nlp/link_grammar_spec.cr --error-trace --verbose
 
     - name: Test Semantic Understanding
       run: |
         echo "=== Testing Semantic Understanding ==="
-        crystal spec spec/nlp/language_processing_capabilities_spec.cr --error-trace --verbose
+        crystal spec --stats -v spec/nlp/language_processing_capabilities_spec.cr --error-trace --verbose
 
   # Reasoning Engine E2E Tests
   reasoning-e2e:
@@ -414,37 +419,37 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y libsqlite3-dev libevent-dev libssl-dev
-        shards install
+        shards install --verbose
 
     - name: Test PLN Reasoning
       run: |
         echo "=== Testing PLN Reasoning ==="
-        crystal spec spec/pln/pln_spec.cr --error-trace --verbose
+        crystal spec --stats -v spec/pln/pln_spec.cr --error-trace --verbose
 
     - name: Test URE Forward Chaining
       run: |
         echo "=== Testing URE Forward Chaining ==="
-        crystal spec spec/ure/ure_spec.cr --error-trace --verbose
+        crystal spec --stats -v spec/ure/ure_spec.cr --error-trace --verbose
 
     - name: Test Advanced Reasoning
       run: |
         echo "=== Testing Advanced Reasoning ==="
-        crystal spec spec/ure/advanced_reasoning_spec.cr --error-trace --verbose || true
+        crystal spec --stats -v spec/ure/advanced_reasoning_spec.cr --error-trace --verbose || true
 
     - name: Test Pattern Matching
       run: |
         echo "=== Testing Pattern Matching ==="
-        crystal spec spec/pattern_matching/ --error-trace --verbose
+        crystal spec --stats -v spec/pattern_matching/ --error-trace --verbose
 
     - name: Test Pattern Mining
       run: |
         echo "=== Testing Pattern Mining ==="
-        crystal spec spec/pattern_mining/ --error-trace --verbose
+        crystal spec --stats -v spec/pattern_mining/ --error-trace --verbose
 
     - name: Test MOSES Optimization
       run: |
         echo "=== Testing MOSES Optimization ==="
-        crystal spec spec/moses/ --error-trace --verbose
+        crystal spec --stats -v spec/moses/ --error-trace --verbose
 
     - name: Test Reasoning Integration
       run: |
@@ -512,7 +517,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y libsqlite3-dev libevent-dev libssl-dev libpq-dev
-        shards install
+        shards install --verbose
 
     - name: Test SQLite Storage
       run: |
@@ -557,7 +562,7 @@ jobs:
     - name: Test Distributed Storage
       run: |
         echo "=== Testing Distributed Storage ==="
-        crystal spec spec/atomspace/distributed_cluster_spec.cr --error-trace || true
+        crystal spec --stats -v spec/atomspace/distributed_cluster_spec.cr --error-trace || true
 
   # Performance E2E Tests
   performance-e2e:
@@ -579,17 +584,17 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y libsqlite3-dev libevent-dev libssl-dev
-        shards install
+        shards install --verbose
 
     - name: Run Performance Specs
       run: |
         echo "=== Running Performance Specs ==="
-        crystal spec spec/performance/ --error-trace --verbose
+        crystal spec --stats -v spec/performance/ --error-trace --verbose
 
     - name: Run Memory Comparison Tests
       run: |
         echo "=== Running Memory Comparison Tests ==="
-        crystal spec spec/performance/memory_comparison_spec.cr --error-trace || true
+        crystal spec --stats -v spec/performance/memory_comparison_spec.cr --error-trace || true
 
     - name: Run Benchmarks
       run: |

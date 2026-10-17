@@ -22,6 +22,11 @@ env:
   CRYSTAL_VERSION: '1.20.1'
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+# Trace every command so CI logs show exactly what ran and what it printed.
+defaults:
+  run:
+    shell: bash -ex {0}
+
 jobs:
   # AtomSpace E2E tests
   atomspace-e2e:
@@ -45,7 +50,7 @@ jobs:
         sudo apt-get install -y libsqlite3-dev librocksdb-dev libevent-dev
 
     - name: Install dependencies
-      run: shards install
+      run: shards install --verbose
 
     - name: Run AtomSpace stress tests
       run: |
@@ -180,11 +185,11 @@ jobs:
         sudo apt-get install -y libsqlite3-dev librocksdb-dev libevent-dev curl jq
 
     - name: Install dependencies
-      run: shards install
+      run: shards install --verbose
 
     - name: Build CogServer
       run: |
-        crystal build --error-trace src/bin/cogserver.cr -o cogserver_bin || echo "CogServer build skipped"
+        crystal build --verbose --stats --error-trace src/bin/cogserver.cr -o cogserver_bin || echo "CogServer build skipped"
 
     - name: Run CogServer load tests
       timeout-minutes: 5
@@ -224,7 +229,7 @@ jobs:
         sudo apt-get install -y libsqlite3-dev librocksdb-dev libevent-dev
 
     - name: Install dependencies
-      run: shards install
+      run: shards install --verbose
 
     - name: Run distributed cache tests
       run: |
@@ -274,7 +279,7 @@ jobs:
         sudo apt-get install -y libsqlite3-dev librocksdb-dev libevent-dev
 
     - name: Install dependencies
-      run: shards install
+      run: shards install --verbose
 
     - name: Run comprehensive benchmarks
       run: |
@@ -373,7 +378,7 @@ jobs:
         sudo apt-get install -y libsqlite3-dev librocksdb-dev libevent-dev
 
     - name: Install dependencies
-      run: shards install
+      run: shards install --verbose
 
     - name: Run WebSocket monitoring test
       run: |
