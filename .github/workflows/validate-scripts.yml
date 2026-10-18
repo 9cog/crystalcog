@@ -1,0 +1,44 @@
+name: Validate Scripts
+
+on:
+  push:
+    paths:
+      - 'scripts/**'
+      - 'docs/**'
+      - 'tools/**'
+      - '.github/workflows/validate-scripts.yml'
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'docs/**'
+      - 'tools/**'
+      - '.github/workflows/validate-scripts.yml'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+# Least-privilege token by default; jobs that write declare their own permissions.
+permissions:
+  contents: read
+
+# Trace every command so CI logs show exactly what ran and what it printed.
+defaults:
+  run:
+    shell: bash -ex {0}
+
+jobs:
+  validate-demo-profiling-tools:
+    name: Validate Demo Profiling Tools Script
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run demo profiling tools validation
+        run: |
+          chmod +x scripts/validation/validate-demo-profiling-tools.sh
+          bash scripts/validation/validate-demo-profiling-tools.sh

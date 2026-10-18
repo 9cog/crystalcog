@@ -46,7 +46,7 @@ module PygmalionAgent
     property top_a : Float64
     property min_p : Float64
     property typical_p : Float64
-    property tfs : Float64  # Tail-free sampling
+    property tfs : Float64 # Tail-free sampling
 
     # Penalty controls
     property presence_penalty : Float64
@@ -55,7 +55,7 @@ module PygmalionAgent
     property repetition_penalty_range : Int32
 
     # Mirostat adaptive sampling
-    property mirostat_mode : Int32  # 0=disabled, 2=Mirostat 2
+    property mirostat_mode : Int32 # 0=disabled, 2=Mirostat 2
     property mirostat_tau : Float64
     property mirostat_eta : Float64
 
@@ -80,15 +80,15 @@ module PygmalionAgent
     property smoothing_curve : Float64
 
     # Additional parameters (NEW)
-    property seed : Int64?                    # Reproducibility seed
-    property best_of : Int32                  # Beam search / best_of
-    property length_penalty : Float64         # Length penalty for beam search
-    property early_stopping : Bool            # Early stopping for beam search
-    property skip_special_tokens : Bool       # Skip special tokens in output
-    property spaces_between_special_tokens : Bool  # Add spaces between special tokens
-    property include_stop_str_in_output : Bool     # Include stop string in output
-    property ignore_eos : Bool                # Ignore end-of-sequence token
-    property logit_bias : Hash(Int32, Float64)     # Token ID -> bias
+    property seed : Int64?                        # Reproducibility seed
+    property best_of : Int32                      # Beam search / best_of
+    property length_penalty : Float64             # Length penalty for beam search
+    property early_stopping : Bool                # Early stopping for beam search
+    property skip_special_tokens : Bool           # Skip special tokens in output
+    property spaces_between_special_tokens : Bool # Add spaces between special tokens
+    property include_stop_str_in_output : Bool    # Include stop string in output
+    property ignore_eos : Bool                    # Ignore end-of-sequence token
+    property logit_bias : Hash(Int32, Float64)    # Token ID -> bias
 
     # NSFW/Content filtering
     property nsfw_allowed : Bool
@@ -373,7 +373,7 @@ module PygmalionAgent
   # Image content for multimodal models
   class ImageContent
     property type : ImageType
-    property data : String  # Base64 or URL
+    property data : String # Base64 or URL
     property detail : ImageDetail
 
     enum ImageType
@@ -895,8 +895,8 @@ module PygmalionAgent
     property choice : Array(String)?
 
     enum GuidedBackend
-      Outlines          # Default, uses outlines library
-      LMFormatEnforcer  # Alternative backend
+      Outlines         # Default, uses outlines library
+      LMFormatEnforcer # Alternative backend
     end
 
     def initialize(
@@ -972,7 +972,7 @@ module PygmalionAgent
       "heart pounding", "heart racing", "pulse quickened",
       "let out a breath", "breath I didn't know",
       "kaleidoscope of", "symphony of", "tapestry of",
-      "oh god", "oh my god"
+      "oh god", "oh my god",
     ]
 
     def initialize(
@@ -1038,11 +1038,11 @@ module PygmalionAgent
     property format : CharacterFormat
 
     enum CharacterFormat
-      Pygmalion  # {{char}}, {{user}} format
-      OpenAI     # Standard system/user/assistant
-      Alpaca     # Instruction format
-      ChatML     # <|im_start|> format
-      Llama3     # Llama 3 format
+      Pygmalion # {{char}}, {{user}} format
+      OpenAI    # Standard system/user/assistant
+      Alpaca    # Instruction format
+      ChatML    # <|im_start|> format
+      Llama3    # Llama 3 format
     end
 
     def initialize(
@@ -1232,7 +1232,7 @@ module PygmalionAgent
     property top_logprobs : Int32?
     property n : Int32
     property user : String?
-    property echo : Bool                  # Echo prompt in response
+    property echo : Bool # Echo prompt in response
 
     property sampling : SamplingConfig
     property guided : GuidedDecodingConfig
@@ -1461,7 +1461,7 @@ module PygmalionAgent
   class EmbeddingRequest
     property input : String | Array(String)
     property model : String?
-    property encoding_format : String  # "float" or "base64"
+    property encoding_format : String # "float" or "base64"
 
     def initialize(
       @input = "",
@@ -1854,7 +1854,7 @@ module PygmalionAgent
           retries += 1
 
           if retries < @config.max_retries
-            delay = @config.retry_delay * (2 ** (retries - 1))  # Exponential backoff
+            delay = @config.retry_delay * (2 ** (retries - 1)) # Exponential backoff
             CogUtil::Logger.warn("Request failed, retrying in #{delay}: #{ex.message}")
             sleep(delay)
           else
@@ -1935,7 +1935,7 @@ module PygmalionAgent
     CHARS_PER_TOKEN = 4.0
 
     property model_max_tokens : Int32
-    property reserved_tokens : Int32  # For response
+    property reserved_tokens : Int32 # For response
 
     def initialize(@model_max_tokens = 4096, @reserved_tokens = 512)
     end
@@ -1950,13 +1950,13 @@ module PygmalionAgent
       total = 0
       messages.each do |msg|
         # Account for role/name tokens and message formatting
-        total += 4  # Approximate overhead per message
+        total += 4 # Approximate overhead per message
         total += estimate(msg.text_content)
         if name = msg.name
           total += estimate(name) + 1
         end
       end
-      total + 2  # Priming tokens
+      total + 2 # Priming tokens
     end
 
     # Calculate available tokens for generation
@@ -2537,18 +2537,18 @@ module PygmalionAgent
     # Get agent status
     def status : Hash(String, String)
       {
-        "agent_status"       => @connected ? "connected" : "disconnected",
-        "model"              => @config.model_name,
-        "api_url"            => @config.api.base_url,
-        "api_type"           => @config.api.api_type.to_s,
-        "available_models"   => @available_models.join(", "),
-        "echo_state_enabled" => @config.echo_state.cognitive_binding.to_s,
-        "conversation_length"=> @conversation_history.size.to_s,
-        "atomspace_attached" => (@atomspace.nil? ? "false" : "true"),
-        "character"          => @config.character.name,
-        "sampling_preset"    => describe_sampling,
-        "tools_enabled"      => @config.tools.enabled?.to_s,
-        "caching_enabled"    => @config.caching.enable_prefix_caching.to_s,
+        "agent_status"        => @connected ? "connected" : "disconnected",
+        "model"               => @config.model_name,
+        "api_url"             => @config.api.base_url,
+        "api_type"            => @config.api.api_type.to_s,
+        "available_models"    => @available_models.join(", "),
+        "echo_state_enabled"  => @config.echo_state.cognitive_binding.to_s,
+        "conversation_length" => @conversation_history.size.to_s,
+        "atomspace_attached"  => (@atomspace.nil? ? "false" : "true"),
+        "character"           => @config.character.name,
+        "sampling_preset"     => describe_sampling,
+        "tools_enabled"       => @config.tools.enabled?.to_s,
+        "caching_enabled"     => @config.caching.enable_prefix_caching.to_s,
       }
     end
 

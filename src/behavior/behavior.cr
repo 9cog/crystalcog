@@ -70,7 +70,11 @@ module Behavior
 
     def add(predicate : Predicate)
       # Remove conflicting predicates first
-      @predicates.reject! { |p| p.conflicts?(predicate) }
+      # Crystal's Set has no in-place `reject!`; collect first so deletion does
+      # not mutate the collection while it is being traversed.
+      @predicates.select { |existing| existing.conflicts?(predicate) }.each do |conflict|
+        @predicates.delete(conflict)
+      end
       @predicates.add(predicate)
     end
 
@@ -376,7 +380,16 @@ module Behavior
     getter children : Array(BTNode)
     @current_index : Int32
 
-    def initialize(name : String, @children : Array(BTNode) = [] of BTNode)
+    def initialize(name : String)
+      @children = [] of BTNode
+      super(name)
+      @current_index = 0
+    end
+
+    # Arrays are invariant in Crystal, so normalize an array of any BTNode
+    # subclass (such as Array(ActionNode)) to the node collection we store.
+    def initialize(name : String, children : Array(T)) forall T
+      @children = children.map(&.as(BTNode))
       super(name)
       @current_index = 0
     end
@@ -415,7 +428,16 @@ module Behavior
     getter children : Array(BTNode)
     @current_index : Int32
 
-    def initialize(name : String, @children : Array(BTNode) = [] of BTNode)
+    def initialize(name : String)
+      @children = [] of BTNode
+      super(name)
+      @current_index = 0
+    end
+
+    # Arrays are invariant in Crystal, so normalize an array of any BTNode
+    # subclass (such as Array(ActionNode)) to the node collection we store.
+    def initialize(name : String, children : Array(T)) forall T
+      @children = children.map(&.as(BTNode))
       super(name)
       @current_index = 0
     end
@@ -463,7 +485,7 @@ module Behavior
       case status
       when NodeStatus::SUCCESS then NodeStatus::FAILURE
       when NodeStatus::FAILURE then NodeStatus::SUCCESS
-      else status
+      else                          status
       end
     end
 
@@ -556,7 +578,7 @@ module Behavior
 
     def add_goal(goal : Goal)
       @goals << goal
-      @goals.sort_by! { |g| -g.priority }  # Highest priority first
+      @goals.sort_by! { |g| -g.priority } # Highest priority first
     end
 
     def remove_goal(name : String)

@@ -13,18 +13,26 @@ description: |
   A complete rewrite of the OpenCog artificial intelligence system
   in Crystal, providing better performance, memory safety, and maintainability.
 
+  Database dependencies can be disabled at compile time using environment variables:
+    DISABLE_SQLITE3=1  - Disable SQLite3 support (requires libsqlite3-dev)
+    DISABLE_POSTGRES=1 - Disable PostgreSQL support (requires libpq-dev)
+    DISABLE_ROCKSDB=1  - Disable RocksDB support (requires librocksdb-dev)
+
+  When all database backends are disabled, use MemoryStorageNode or FileStorageNode.
+
 dependencies:
-  # Database and persistence
+  # Database and persistence (optional - can be disabled with DISABLE_* env vars)
   sqlite3:
     github: crystal-lang/crystal-sqlite3
   pg:
     github: will/crystal-pg
+    branch: master
 
 development_dependencies:
 
 targets:
   crystalcog:
-    main: src/crystalcog.cr
+    main: src/bin/crystalcog.cr
 
   # Core library components
   cogutil_bin:
@@ -35,10 +43,6 @@ targets:
     
   opencog_bin:
     main: src/opencog/opencog.cr
-
-  # Integration components
-  integration_demo:
-    main: examples/integration_examples/complete_integration_demo.cr
 
   # Reasoning engines
   pln_bin:
@@ -75,7 +79,7 @@ targets:
     
   # Server applications
   cogserver:
-    main: src/cogserver/cogserver_main.cr
+    main: src/bin/cogserver.cr
     
   # Agent-Zero distributed networks
   distributed_network_demo:
@@ -93,13 +97,17 @@ targets:
 
   # Command line tools
   cogshell:
-    main: src/tools/cogshell.cr
+    main: src/bin/cogshell.cr
 
   profiler:
     main: tools/profiler.cr
 
+  # Genetic Programming module
+  genetic_programming:
+    main: src/genetic_programming/genetic_programming_main.cr
+
 scripts:
-  build: crystal build src/crystalcog.cr
+  build: crystal build src/bin/crystalcog.cr
   test: crystal spec
   docs: crystal docs
-  benchmark: crystal run --release benchmarks/benchmark.cr
+  benchmark: crystal run --release benchmarks/atomspace_benchmark.cr

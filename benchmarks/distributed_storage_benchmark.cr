@@ -22,7 +22,6 @@ def create_test_atoms(count : Int32) : Array(AtomSpace::Atom)
   atoms = [] of AtomSpace::Atom
   count.times do |i|
     atom = AtomSpace::ConceptNode.new("test_concept_#{i}")
-    atom.handle = AtomSpace::Handle.new(i.to_u64)
     atoms << atom
   end
   atoms
@@ -149,7 +148,7 @@ partition_lookup_count = 10000
 # Without cache
 no_partition_cache_time = Benchmark.measure do
   partition_lookup_count.times do |i|
-    handle = AtomSpace::Handle.new(i.to_u64)
+    handle = (i.to_u64)
     # Simulate hash calculation overhead
     hash_value = handle.hash.abs.to_u64
     partition = "node_#{hash_value % 10}"
@@ -159,14 +158,12 @@ end
 # With cache
 with_partition_cache_time = Benchmark.measure do
   partition_lookup_count.times do |i|
-    handle = AtomSpace::Handle.new(i.to_u64)
-    
-    cached_info = partition_cache.get(handle)
+    handle = (i.to_u64)
+
+    cached_info = partition_cache.get(handle.to_s)
     unless cached_info
-      hash_value = handle.hash.abs.to_u64
-      partition = "node_#{hash_value % 10}"
-      info = AtomSpace::PartitionInfo.new(partition, Time.utc)
-      partition_cache.put(handle, info)
+      partition = "node_#{handle % 10}"
+      partition_cache.put(handle.to_s, partition)
     end
   end
 end
@@ -179,7 +176,7 @@ puts "  Lookups: #{partition_lookup_count}"
 puts "  Without cache: #{(no_partition_cache_time.real * 1000).round(2)}ms"
 puts "  With cache: #{(with_partition_cache_time.real * 1000).round(2)}ms"
 puts "  Speedup: #{partition_speedup.round(2)}x"
-puts "  Cache hit rate: #{partition_stats["hit_rate_percent"].round(2)}%"
+puts "  Cache hit rate: #{partition_stats["hit_rate_percent"].as(Float64).round(2)}%"
 puts "  Cache size: #{partition_stats["size"]}"
 puts
 
@@ -205,10 +202,10 @@ end
 # Concurrent access
 concurrent_time = Benchmark.measure do
   cache = AtomSpace::LRUCache.new(CACHE_SIZE)
+  done = Channel(Nil).new(thread_count)
   
-  fibers = [] of Fiber
   thread_count.times do
-    fibers << spawn do
+    spawn do
       concurrent_access_count.times do |i|
         index = rand(ATOM_COUNT)
         atom = cache.get(atoms[index].handle)
@@ -216,10 +213,11 @@ concurrent_time = Benchmark.measure do
           cache.put(atoms[index])
         end
       end
+      done.send(nil)
     end
   end
   
-  fibers.each(&.join)
+  thread_count.times { done.receive }
 end
 
 concurrent_speedup = sequential_time.real / concurrent_time.real

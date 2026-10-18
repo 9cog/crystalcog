@@ -16,10 +16,10 @@ crystal spec spec/pln/
 crystal spec spec/nlp/
 
 # Build main executable
-crystal build src/crystalcog.cr
+crystal build src/bin/crystalcog.cr
 
 # Build with release optimizations
-crystal build src/crystalcog.cr --release
+crystal build src/bin/crystalcog.cr --release
 
 # Run benchmarks
 crystal run --release benchmarks/atomspace_benchmark.cr

@@ -7,11 +7,88 @@ require "../cogutil/cogutil"
 module PLN
   VERSION = "0.1.0"
 
+  # A per-iteration read view for the built-in inheritance rules. AtomSpace
+  # exposes snapshot arrays and Link#outgoing returns a detached copy; this
+  # keeps the repeated rule scans and copies local to PLN.
+  #
+  # PLN uses it only for its stock rules. Adding a custom rule selects the
+  # direct public rule API, preserving historical custom-rule behavior.
+  class InferenceContext
+    getter facts : Array(AtomSpace::Atom)
+    getter inheritance_links : Array(AtomSpace::Atom)
+
+    @facts_by_handle : Hash(AtomSpace::Handle, AtomSpace::Atom)
+    @inheritance_by_subject : Hash(AtomSpace::Handle, Array(AtomSpace::Atom))
+    @inheritance_by_object : Hash(AtomSpace::Handle, Array(AtomSpace::Atom))
+    @handle_identity_safe : Bool
+
+    def initialize(atomspace : AtomSpace::AtomSpace, @facts : Array(AtomSpace::Atom))
+      @facts_by_handle = Hash(AtomSpace::Handle, AtomSpace::Atom).new
+      @facts.each { |atom| @facts_by_handle[atom.handle] = atom }
+      @inheritance_links = [] of AtomSpace::Atom
+      @inheritance_by_subject = Hash(AtomSpace::Handle, Array(AtomSpace::Atom)).new
+      @inheritance_by_object = Hash(AtomSpace::Handle, Array(AtomSpace::Atom)).new
+      @handle_identity_safe = true
+      refresh_inheritance(atomspace)
+    end
+
+    # Rebuild after an accepted inheritance link. This preserves AtomSpace's
+    # candidate ordering while retaining links inferred earlier this iteration.
+    def refresh_inheritance(atomspace : AtomSpace::AtomSpace)
+      @inheritance_links = atomspace.get_atoms_by_type(AtomSpace::AtomType::INHERITANCE_LINK)
+      @inheritance_by_subject.clear
+      @inheritance_by_object.clear
+      @handle_identity_safe = true
+
+      @inheritance_links.each do |atom|
+        next unless atom.is_a?(AtomSpace::Link)
+        next unless atom.arity == 2
+
+        subject = atom[0]
+        object = atom[1]
+        # AtomSpace indexes links by child handle but does not canonicalize
+        # supplied child atoms. If any link is detached, preserve the original
+        # Atom#== matching semantics with the fallback arrays below.
+        @handle_identity_safe &&= atomspace.contains?(subject) && atomspace.contains?(object)
+        (@inheritance_by_subject[subject.handle] ||= [] of AtomSpace::Atom) << atom
+        (@inheritance_by_object[object.handle] ||= [] of AtomSpace::Atom) << atom
+      end
+    end
+
+    def links_from(subject : AtomSpace::Atom) : Array(AtomSpace::Atom)
+      return @inheritance_links unless @handle_identity_safe
+
+      @inheritance_by_subject[subject.handle]? || [] of AtomSpace::Atom
+    end
+
+    def links_to(object : AtomSpace::Atom) : Array(AtomSpace::Atom)
+      return @inheritance_links unless @handle_identity_safe
+
+      @inheritance_by_object[object.handle]? || [] of AtomSpace::Atom
+    end
+
+    def handle_identity_safe? : Bool
+      @handle_identity_safe
+    end
+
+    def fact(atom : AtomSpace::Atom) : AtomSpace::Atom?
+      return @facts_by_handle[atom.handle]? if @handle_identity_safe
+
+      @facts.find { |candidate| candidate == atom }
+    end
+  end
+
   # PLN Rule interface
   abstract class PLNRule
     abstract def name : String
     abstract def applies_to?(premise : AtomSpace::Atom) : Bool
     abstract def apply(premise : AtomSpace::Atom, atomspace : AtomSpace::AtomSpace) : AtomSpace::Atom?
+
+    # Custom rules retain the public apply contract. Built-in rules override
+    # this to reuse the default engine's per-iteration inference context.
+    def apply_with_context(premise : AtomSpace::Atom, atomspace : AtomSpace::AtomSpace, context : InferenceContext) : AtomSpace::Atom?
+      apply(premise, atomspace)
+    end
   end
 
   # Deduction Rule: If A->B and B->C then A->C
@@ -27,20 +104,32 @@ module PLN
     end
 
     def apply(premise : AtomSpace::Atom, atomspace : AtomSpace::AtomSpace) : AtomSpace::Atom?
+      apply_from_candidates(
+        premise,
+        atomspace,
+        atomspace.get_atoms_by_type(AtomSpace::AtomType::INHERITANCE_LINK)
+      )
+    end
+
+    def apply_with_context(premise : AtomSpace::Atom, atomspace : AtomSpace::AtomSpace, context : InferenceContext) : AtomSpace::Atom?
       return nil unless premise.is_a?(AtomSpace::Link)
-      return nil unless premise.outgoing.size == 2
+      return nil unless premise.arity == 2
 
-      # Look for another inheritance link with matching middle term
-      a, b = premise.outgoing[0], premise.outgoing[1]
+      apply_from_candidates(premise, atomspace, context.links_from(premise[1]))
+    end
 
-      # Find B->C links where B matches our B
-      inheritance_links = atomspace.get_atoms_by_type(AtomSpace::AtomType::INHERITANCE_LINK)
+    private def apply_from_candidates(premise : AtomSpace::Atom, atomspace : AtomSpace::AtomSpace, inheritance_links : Array(AtomSpace::Atom)) : AtomSpace::Atom?
+      return nil unless premise.is_a?(AtomSpace::Link)
+      return nil unless premise.arity == 2
+
+      # Look for another inheritance link with matching middle term.
+      a, b = premise[0], premise[1]
 
       inheritance_links.each do |link|
         next unless link.is_a?(AtomSpace::Link)
-        next unless link.outgoing.size == 2
+        next unless link.arity == 2
 
-        b2, c = link.outgoing[0], link.outgoing[1]
+        b2, c = link[0], link[1]
 
         if b == b2 # Found matching chain A->B, B->C
           # Calculate new truth value using PLN formula
@@ -79,16 +168,24 @@ module PLN
 
     def apply(premise : AtomSpace::Atom, atomspace : AtomSpace::AtomSpace) : AtomSpace::Atom?
       return nil unless premise.is_a?(AtomSpace::Link)
-      return nil unless premise.outgoing.size == 2
+      return nil unless premise.arity == 2
 
-      a, b = premise.outgoing[0], premise.outgoing[1]
+      a, b = premise[0], premise[1]
 
       # Create inverted truth value
       tv = premise.truth_value
-      inverted_strength = 1.0 / (1.0 + (1.0 - tv.strength) / tv.strength)
+      # When strength is 0, inversion is undefined; treat as zero strength
+      inverted_strength = if tv.strength <= 0.0
+                            0.0
+                          else
+                            1.0 / (1.0 + (1.0 - tv.strength) / tv.strength)
+                          end
       inverted_confidence = tv.confidence * 0.8 # Discount for inversion
 
-      inverted_tv = AtomSpace::SimpleTruthValue.new(inverted_strength, inverted_confidence)
+      inverted_tv = AtomSpace::SimpleTruthValue.new(
+        inverted_strength.clamp(0.0, 1.0),
+        inverted_confidence.clamp(0.0, 1.0)
+      )
 
       # Create B->A link
       atomspace.add_link(
@@ -113,10 +210,10 @@ module PLN
 
     def apply(premise : AtomSpace::Atom, atomspace : AtomSpace::AtomSpace) : AtomSpace::Atom?
       return nil unless premise.is_a?(AtomSpace::Link)
-      return nil unless premise.outgoing.size == 2
+      return nil unless premise.arity == 2
 
       # premise is A->B
-      a, b = premise.outgoing[0], premise.outgoing[1]
+      a, b = premise[0], premise[1]
 
       # Look for A in the atomspace (as a fact)
       atoms = atomspace.get_all_atoms
@@ -157,6 +254,41 @@ module PLN
 
       nil
     end
+
+    def apply_with_context(premise : AtomSpace::Atom, atomspace : AtomSpace::AtomSpace, context : InferenceContext) : AtomSpace::Atom?
+      # Detached consequents may become new facts earlier in this iteration.
+      # The historical API scans the live graph, not its initial fact snapshot.
+      return apply(premise, atomspace) unless context.handle_identity_safe?
+
+      return nil unless premise.is_a?(AtomSpace::Link)
+      return nil unless premise.arity == 2
+
+      a, b = premise[0], premise[1]
+      fact = context.fact(a)
+      return nil unless fact
+      return nil unless fact.truth_value.confidence > 0.5
+
+      tv_ab = premise.truth_value
+      tv_a = fact.truth_value
+      p_b_given_a = tv_ab.strength
+      p_a = tv_a.strength
+      p_not_a = 1.0 - p_a
+      p_b_given_not_a = 0.2
+
+      new_strength = p_b_given_a * p_a + p_b_given_not_a * p_not_a
+      new_confidence = [tv_ab.confidence, tv_a.confidence].min * 0.9
+      new_tv = AtomSpace::SimpleTruthValue.new(new_strength, new_confidence)
+
+      existing_b = atomspace.get_nodes_by_name(b.name, b.type).first?
+      if existing_b
+        if new_tv.confidence > existing_b.truth_value.confidence
+          existing_b.truth_value = new_tv
+        end
+        existing_b
+      else
+        atomspace.add_node(b.type, b.name, new_tv)
+      end
+    end
   end
 
   # Abduction Rule: If A->B and C->B then A->C
@@ -172,41 +304,51 @@ module PLN
     end
 
     def apply(premise : AtomSpace::Atom, atomspace : AtomSpace::AtomSpace) : AtomSpace::Atom?
+      apply_from_candidates(
+        premise,
+        atomspace,
+        atomspace.get_atoms_by_type(AtomSpace::AtomType::INHERITANCE_LINK)
+      )
+    end
+
+    def apply_with_context(premise : AtomSpace::Atom, atomspace : AtomSpace::AtomSpace, context : InferenceContext) : AtomSpace::Atom?
       return nil unless premise.is_a?(AtomSpace::Link)
-      return nil unless premise.outgoing.size == 2
+      return nil unless premise.arity == 2
+
+      apply_from_candidates(premise, atomspace, context.links_to(premise[1]))
+    end
+
+    private def apply_from_candidates(premise : AtomSpace::Atom, atomspace : AtomSpace::AtomSpace, inheritance_links : Array(AtomSpace::Atom)) : AtomSpace::Atom?
+      return nil unless premise.is_a?(AtomSpace::Link)
+      return nil unless premise.arity == 2
 
       # premise is A->B
-      a, b = premise.outgoing[0], premise.outgoing[1]
-
-      # Look for C->B (another link with same consequent B)
-      inheritance_links = atomspace.get_atoms_by_type(AtomSpace::AtomType::INHERITANCE_LINK)
+      a, b = premise[0], premise[1]
 
       inheritance_links.each do |link|
         next unless link.is_a?(AtomSpace::Link)
-        next unless link.outgoing.size == 2
+        next unless link.arity == 2
         next if link == premise # Don't use the same premise
 
-        c, b2 = link.outgoing[0], link.outgoing[1]
+        c, b2 = link[0], link[1]
 
         if b == b2 && a != c # Found C->B where B matches and C is different from A
           # Apply abduction: conclude A->C
           tv_ab = premise.truth_value
           tv_cb = link.truth_value
 
-          # Abduction formula (simplified from OpenCog PLN)
-          # Based on the idea that if both A and C lead to B,
-          # then A and C might be related
-          s_a = tv_ab.strength
-          s_ab = tv_ab.strength
-          s_c = tv_cb.strength
-          s_cb = tv_cb.strength
-
           # Simplified abduction strength calculation
-          # This is a basic version - the full OpenCog formula is more complex
-          new_strength = (s_ab * s_cb) / (s_ab * s_cb + (1 - s_ab) * (1 - s_cb))
+          s_ab = tv_ab.strength
+          s_cb = tv_cb.strength
+          # Guard against 0/0 when both strengths are extreme (e.g. 1.0 and 0.0)
+          denom = s_ab * s_cb + (1 - s_ab) * (1 - s_cb)
+          new_strength = denom > 0.0 ? (s_ab * s_cb) / denom : 0.0
           new_confidence = [tv_ab.confidence, tv_cb.confidence].min * 0.6 # Lower confidence for abduction
 
-          new_tv = AtomSpace::SimpleTruthValue.new(new_strength, new_confidence)
+          new_tv = AtomSpace::SimpleTruthValue.new(
+            new_strength.clamp(0.0, 1.0),
+            new_confidence.clamp(0.0, 1.0)
+          )
 
           # Create A->C link (avoid creating A->A)
           if a != c
@@ -223,9 +365,243 @@ module PLN
     end
   end
 
+  # Revision Rule: combine two truth values for the same statement
+  # TV_rev = revision(TV1, TV2) with confidence-weighted strength
+  class RevisionRule < PLNRule
+    def name : String
+      "RevisionRule"
+    end
+
+    def applies_to?(premise : AtomSpace::Atom) : Bool
+      true # Can revise any atom that has a duplicate
+    end
+
+    def apply(premise : AtomSpace::Atom, atomspace : AtomSpace::AtomSpace) : AtomSpace::Atom?
+      # Find another atom with same structure but different TV
+      candidates = if premise.is_a?(AtomSpace::Node)
+                     atomspace.get_nodes_by_name(premise.name, premise.type)
+                   else
+                     atomspace.get_atoms_by_type(premise.type).select { |a| a == premise || structurally_equal?(a, premise) }
+                   end
+
+      candidates.each do |other|
+        next if other.handle == premise.handle
+        next unless structurally_equal?(other, premise)
+
+        revised = PLN.revise_truth_values(premise.truth_value, other.truth_value)
+        if revised.confidence > premise.truth_value.confidence
+          premise.truth_value = revised
+          return premise
+        end
+      end
+
+      nil
+    end
+
+    private def structurally_equal?(a : AtomSpace::Atom, b : AtomSpace::Atom) : Bool
+      return false unless a.type == b.type
+      if a.is_a?(AtomSpace::Node) && b.is_a?(AtomSpace::Node)
+        a.name == b.name
+      elsif a.is_a?(AtomSpace::Link) && b.is_a?(AtomSpace::Link)
+        a.outgoing.size == b.outgoing.size &&
+          a.outgoing.zip(b.outgoing).all? { |x, y| structurally_equal?(x, y) }
+      else
+        false
+      end
+    end
+  end
+
+  # Conditional reasoning: P(B|A) from implication and evidence
+  class ConditionalRule < PLNRule
+    def name : String
+      "ConditionalRule"
+    end
+
+    def applies_to?(premise : AtomSpace::Atom) : Bool
+      premise.is_a?(AtomSpace::Link) &&
+        (premise.type == AtomSpace::AtomType::INHERITANCE_LINK ||
+          premise.type == AtomSpace::AtomType::IMPLICATION_LINK)
+    end
+
+    def apply(premise : AtomSpace::Atom, atomspace : AtomSpace::AtomSpace) : AtomSpace::Atom?
+      return nil unless premise.is_a?(AtomSpace::Link)
+      return nil unless premise.outgoing.size == 2
+
+      a, b = premise.outgoing[0], premise.outgoing[1]
+      tv_impl = premise.truth_value
+
+      # Look for evidence about A
+      evidence = if a.is_a?(AtomSpace::Node)
+                   atomspace.get_nodes_by_name(a.name, a.type).first?
+                 else
+                   a
+                 end
+      return nil unless evidence
+
+      # P(B|A) approximated by implication strength; update B's TV
+      p_b_given_a = tv_impl.strength
+      p_a = evidence.truth_value.strength
+      p_b = p_b_given_a * p_a + 0.1 * (1.0 - p_a) # weak background
+      conf = Math.min(tv_impl.confidence, evidence.truth_value.confidence) * 0.85
+
+      new_tv = AtomSpace::SimpleTruthValue.new(p_b.clamp(0.0, 1.0), conf.clamp(0.0, 1.0))
+
+      if b.is_a?(AtomSpace::Node)
+        atomspace.add_node(b.type, b.name, new_tv)
+      else
+        atomspace.add_link(b.type, b.as(AtomSpace::Link).outgoing, new_tv)
+      end
+    end
+  end
+
+  # Evaluation Rule: evaluate a predicate application against known facts
+  class EvaluationRule < PLNRule
+    def name : String
+      "EvaluationRule"
+    end
+
+    def applies_to?(premise : AtomSpace::Atom) : Bool
+      premise.is_a?(AtomSpace::Link) &&
+        premise.type == AtomSpace::AtomType::EVALUATION_LINK
+    end
+
+    def apply(premise : AtomSpace::Atom, atomspace : AtomSpace::AtomSpace) : AtomSpace::Atom?
+      return nil unless premise.is_a?(AtomSpace::Link)
+      return nil unless premise.outgoing.size >= 2
+
+      # If evaluation already has high confidence, nothing to do
+      return nil if premise.truth_value.confidence >= 0.95
+
+      # Look for similar evaluations (same predicate) to estimate TV
+      pred = premise.outgoing[0]
+      similar = atomspace.get_atoms_by_type(AtomSpace::AtomType::EVALUATION_LINK).select do |link|
+        link.is_a?(AtomSpace::Link) && link.outgoing.size >= 1 && link.outgoing[0] == pred && link.handle != premise.handle
+      end
+
+      return nil if similar.empty?
+
+      avg_s = similar.sum { |l| l.truth_value.strength } / similar.size
+      avg_c = similar.sum { |l| l.truth_value.confidence } / similar.size * 0.7
+      new_tv = AtomSpace::SimpleTruthValue.new(avg_s.clamp(0.0, 1.0), avg_c.clamp(0.0, 1.0))
+
+      if new_tv.confidence > premise.truth_value.confidence
+        premise.truth_value = new_tv
+        premise
+      else
+        nil
+      end
+    end
+  end
+
+  # Fuzzy membership: map continuous values to graded membership truth values
+  module FuzzyMembership
+    # Triangular membership function centered at c with half-width w
+    def self.triangular(x : Float64, center : Float64, width : Float64) : Float64
+      return 0.0 if width <= 0.0
+      dist = (x - center).abs
+      return 0.0 if dist >= width
+      1.0 - dist / width
+    end
+
+    # Trapezoidal membership
+    def self.trapezoidal(x : Float64, a : Float64, b : Float64, c : Float64, d : Float64) : Float64
+      return 0.0 if x < a || x > d
+      return (x - a) / (b - a) if x < b && b > a
+      return 1.0 if x <= c
+      return (d - x) / (d - c) if d > c
+      0.0
+    end
+
+    # Gaussian membership
+    def self.gaussian(x : Float64, mean : Float64, sigma : Float64) : Float64
+      return 0.0 if sigma <= 0.0
+      Math.exp(-0.5 * ((x - mean) / sigma) ** 2)
+    end
+
+    # Convert membership grade to a SimpleTruthValue
+    def self.to_truth_value(membership : Float64, confidence : Float64 = 0.9) : AtomSpace::SimpleTruthValue
+      AtomSpace::SimpleTruthValue.new(membership.clamp(0.0, 1.0), confidence.clamp(0.0, 1.0))
+    end
+  end
+
+  # Joint probability inference from independent (or weakly dependent) factors
+  module JointProbability
+    # Independent joint: P(A and B) = P(A) * P(B)
+    def self.independent(tv_a : AtomSpace::TruthValue, tv_b : AtomSpace::TruthValue) : AtomSpace::SimpleTruthValue
+      s = tv_a.strength * tv_b.strength
+      c = tv_a.confidence * tv_b.confidence
+      AtomSpace::SimpleTruthValue.new(s.clamp(0.0, 1.0), c.clamp(0.0, 1.0))
+    end
+
+    # Noisy-OR: P(A or B) = 1 - (1-P(A))*(1-P(B))
+    def self.noisy_or(tv_a : AtomSpace::TruthValue, tv_b : AtomSpace::TruthValue) : AtomSpace::SimpleTruthValue
+      s = 1.0 - (1.0 - tv_a.strength) * (1.0 - tv_b.strength)
+      c = Math.min(tv_a.confidence, tv_b.confidence)
+      AtomSpace::SimpleTruthValue.new(s.clamp(0.0, 1.0), c.clamp(0.0, 1.0))
+    end
+
+    # Conditional joint using P(A|B) approx: P(A and B) = P(A|B) * P(B)
+    def self.conditional(tv_a_given_b : AtomSpace::TruthValue, tv_b : AtomSpace::TruthValue) : AtomSpace::SimpleTruthValue
+      s = tv_a_given_b.strength * tv_b.strength
+      c = tv_a_given_b.confidence * tv_b.confidence
+      AtomSpace::SimpleTruthValue.new(s.clamp(0.0, 1.0), c.clamp(0.0, 1.0))
+    end
+  end
+
+  # Higher-order reasoning: apply rules to links about links (meta-statements)
+  class HigherOrderRule < PLNRule
+    def name : String
+      "HigherOrderRule"
+    end
+
+    def applies_to?(premise : AtomSpace::Atom) : Bool
+      return false unless premise.is_a?(AtomSpace::Link)
+      # Higher-order if any outgoing atom is itself a link
+      premise.outgoing.any? { |o| o.is_a?(AtomSpace::Link) }
+    end
+
+    def apply(premise : AtomSpace::Atom, atomspace : AtomSpace::AtomSpace) : AtomSpace::Atom?
+      return nil unless premise.is_a?(AtomSpace::Link)
+      return nil unless premise.outgoing.size == 2
+
+      # If we have Implication(Inheritance(A,B), Inheritance(B,C)),
+      # try to conclude Inheritance(A,C) with discounted confidence
+      left, right = premise.outgoing[0], premise.outgoing[1]
+      return nil unless left.is_a?(AtomSpace::Link) && right.is_a?(AtomSpace::Link)
+      return nil unless left.type == AtomSpace::AtomType::INHERITANCE_LINK
+      return nil unless right.type == AtomSpace::AtomType::INHERITANCE_LINK
+      return nil unless left.outgoing.size == 2 && right.outgoing.size == 2
+
+      a, b1 = left.outgoing[0], left.outgoing[1]
+      b2, c = right.outgoing[0], right.outgoing[1]
+      return nil unless b1 == b2
+
+      s = premise.truth_value.strength * left.truth_value.strength * right.truth_value.strength
+      conf = premise.truth_value.confidence * 0.5
+      new_tv = AtomSpace::SimpleTruthValue.new(s.clamp(0.0, 1.0), conf.clamp(0.0, 1.0))
+
+      atomspace.add_link(AtomSpace::AtomType::INHERITANCE_LINK, [a, c], new_tv)
+    end
+  end
+
+  # PLN truth value revision formula (OpenCog-style)
+  def self.revise_truth_values(tv1 : AtomSpace::TruthValue, tv2 : AtomSpace::TruthValue) : AtomSpace::SimpleTruthValue
+    c1 = tv1.confidence
+    c2 = tv2.confidence
+    total_c = c1 + c2 - c1 * c2
+    return AtomSpace::SimpleTruthValue.new(tv1.strength, c1) if total_c <= 0.0
+
+    # Confidence-weighted strength
+    w1 = c1 / (c1 + c2)
+    w2 = c2 / (c1 + c2)
+    strength = w1 * tv1.strength + w2 * tv2.strength
+    AtomSpace::SimpleTruthValue.new(strength.clamp(0.0, 1.0), total_c.clamp(0.0, 1.0))
+  end
+
   # PLN Reasoning Engine
   class PLNEngine
     @rules : Array(PLNRule)
+    @has_custom_rules : Bool
 
     def initialize(@atomspace : AtomSpace::AtomSpace)
       @rules = [
@@ -234,10 +610,23 @@ module PLN
         ModusPonensRule.new,
         AbductionRule.new,
       ] of PLNRule
+      @has_custom_rules = false
+    end
+
+    # Opt in to the revision, conditional, evaluation and higher-order rules.
+    # They rescan the AtomSpace per premise and may update existing truth
+    # values, so they run on the direct-scan path rather than the stock context.
+    def add_advanced_rules : self
+      add_rule(RevisionRule.new)
+      add_rule(ConditionalRule.new)
+      add_rule(EvaluationRule.new)
+      add_rule(HigherOrderRule.new)
+      self
     end
 
     def add_rule(rule : PLNRule)
       @rules << rule
+      @has_custom_rules = true
     end
 
     def reason(max_iterations : Int32 = 10) : Array(AtomSpace::Atom)
@@ -248,16 +637,27 @@ module PLN
         iteration_new_atoms = [] of AtomSpace::Atom
         initial_atomspace_size = @atomspace.size
 
-        # Apply rules to all atoms
-        @atomspace.get_all_atoms.each do |atom|
+        # Apply rules to a snapshot of atoms. The stock rule set uses the
+        # PLN-local context; any caller-added rule retains direct scan behavior.
+        iteration_atoms = @atomspace.get_all_atoms
+        context = @has_custom_rules ? nil : InferenceContext.new(@atomspace, iteration_atoms)
+
+        iteration_atoms.each do |atom|
           @rules.each do |rule|
             if rule.applies_to?(atom)
-              new_atom = rule.apply(atom, @atomspace)
+              new_atom = if context
+                           rule.apply_with_context(atom, @atomspace, context)
+                         else
+                           rule.apply(atom, @atomspace)
+                         end
               if new_atom
                 # Check if this actually added a new atom to the atomspace
                 if @atomspace.size > initial_atomspace_size
                   iteration_new_atoms << new_atom
                   initial_atomspace_size = @atomspace.size # Update for next check
+                  if context && new_atom.type == AtomSpace::AtomType::INHERITANCE_LINK
+                    context.refresh_inheritance(@atomspace)
+                  end
                   CogUtil::Logger.debug("PLN: Applied #{rule.name} to #{atom}, created #{new_atom}")
                 end
               end
@@ -297,28 +697,100 @@ module PLN
       # Check if goal already exists
       return true if @atomspace.contains?(goal)
 
-      # Try to derive the goal using available rules
-      @rules.each do |rule|
-        # This is a simplified backward chaining
-        # In practice, this would be more sophisticated
-        if rule.applies_to?(goal)
-          premises = find_premises_for_goal(goal, rule)
-          premises.each do |premise|
-            if @atomspace.contains?(premise)
-              derived = rule.apply(premise, @atomspace)
-              return true if derived && derived == goal
-            end
+      # Try to derive the goal from existing premises via known rules
+      find_premises_for_goal(goal).each do |premise|
+        @rules.each do |rule|
+          next unless rule.applies_to?(premise)
+          derived = rule.apply(premise, @atomspace)
+          next unless derived
+
+          # Goal reached if we produced an equivalent atom (same type/structure)
+          if atoms_match_goal?(derived, goal)
+            return true
           end
         end
       end
 
-      false
+      # One more forward-ish sweep: run a single reasoning iteration and re-check
+      reason(1)
+      @atomspace.contains?(goal) || find_equivalent(goal) != nil
     end
 
-    private def find_premises_for_goal(goal : AtomSpace::Atom, rule : PLNRule) : Array(AtomSpace::Atom)
-      # This would contain rule-specific logic to find premises
-      # that could lead to the goal
-      [] of AtomSpace::Atom
+    # Find premises in the atomspace that could produce the goal under PLN rules
+    private def find_premises_for_goal(goal : AtomSpace::Atom) : Array(AtomSpace::Atom)
+      premises = [] of AtomSpace::Atom
+
+      case goal
+      when AtomSpace::Link
+        return premises unless goal.outgoing.size == 2
+        target_a, target_b = goal.outgoing[0], goal.outgoing[1]
+
+        case goal.type
+        when AtomSpace::AtomType::INHERITANCE_LINK
+          # Deduction: A->B, B->C => A->C  — look for middle term B
+          inheritance_links = @atomspace.get_atoms_by_type(AtomSpace::AtomType::INHERITANCE_LINK)
+          inheritance_links.each do |link|
+            next unless link.is_a?(AtomSpace::Link) && link.outgoing.size == 2
+            # A->B where A matches goal source
+            if link.outgoing[0] == target_a
+              middle = link.outgoing[1]
+              # Need B->C
+              has_bc = inheritance_links.any? do |other|
+                other.is_a?(AtomSpace::Link) && other.outgoing.size == 2 &&
+                  other.outgoing[0] == middle && other.outgoing[1] == target_b
+              end
+              premises << link if has_bc
+            end
+          end
+
+          # Inversion: B->A could produce A->B
+          inheritance_links.each do |link|
+            next unless link.is_a?(AtomSpace::Link) && link.outgoing.size == 2
+            if link.outgoing[0] == target_b && link.outgoing[1] == target_a
+              premises << link
+            end
+          end
+
+          # Abduction: A->B and C->B can relate A and C
+          inheritance_links.each do |link|
+            next unless link.is_a?(AtomSpace::Link) && link.outgoing.size == 2
+            if link.outgoing[0] == target_a
+              premises << link
+            end
+          end
+        else
+          # Generic: any atom of matching premise-friendly types
+          @atomspace.get_atoms_by_type(goal.type).each { |a| premises << a }
+        end
+      else
+        # Node goals: look for inheritance links that conclude the node via modus ponens
+        inheritance_links = @atomspace.get_atoms_by_type(AtomSpace::AtomType::INHERITANCE_LINK)
+        inheritance_links.each do |link|
+          next unless link.is_a?(AtomSpace::Link) && link.outgoing.size == 2
+          premises << link if link.outgoing[1] == goal
+        end
+      end
+
+      premises.uniq!
+      premises
+    end
+
+    private def atoms_match_goal?(derived : AtomSpace::Atom, goal : AtomSpace::Atom) : Bool
+      return true if derived == goal
+      return false unless derived.type == goal.type
+
+      if derived.responds_to?(:outgoing) && goal.responds_to?(:outgoing)
+        return false unless derived.outgoing.size == goal.outgoing.size
+        derived.outgoing.zip(goal.outgoing).all? { |d, g| d == g }
+      elsif derived.responds_to?(:name) && goal.responds_to?(:name)
+        derived.name == goal.name
+      else
+        false
+      end
+    end
+
+    private def find_equivalent(goal : AtomSpace::Atom) : AtomSpace::Atom?
+      @atomspace.get_atoms_by_type(goal.type).find { |atom| atoms_match_goal?(atom, goal) }
     end
   end
 
@@ -330,5 +802,10 @@ module PLN
   # Convenience method to create PLN engine
   def self.create_engine(atomspace : AtomSpace::AtomSpace) : PLNEngine
     PLNEngine.new(atomspace)
+  end
+
+  # Engine with the stock rules plus the advanced rule set.
+  def self.create_advanced_engine(atomspace : AtomSpace::AtomSpace) : PLNEngine
+    PLNEngine.new(atomspace).add_advanced_rules
   end
 end

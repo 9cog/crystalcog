@@ -18,7 +18,7 @@ describe "CrystalCog Integration Scenarios" do
   describe "Real-world reasoning scenarios" do
     it "handles family relationships reasoning" do
       atomspace = AtomSpace::AtomSpace.new
-      
+
       # Build family knowledge base
       tv_certain = AtomSpace::SimpleTruthValue.new(1.0, 0.95)
       tv_likely = AtomSpace::SimpleTruthValue.new(0.9, 0.8)
@@ -72,8 +72,9 @@ describe "CrystalCog Integration Scenarios" do
       pln_atoms = pln_engine.reason(5)
       ure_atoms = ure_engine.forward_chain(3)
 
-      # Should have derived additional relationships
-      atomspace.size.should be >= initial_size
+      # Should have derived additional relationships via implication grounding
+      atomspace.size.should be > initial_size
+      (pln_atoms.size + ure_atoms.size).should be > 0
 
       # Should be able to find parent relationships
       parent_facts = atomspace.get_atoms_by_type(AtomSpace::AtomType::EVALUATION_LINK)
@@ -82,13 +83,14 @@ describe "CrystalCog Integration Scenarios" do
             link.predicate == parent_of
         }
 
+      parent_facts.size.should be > 0
       puts "Family reasoning: generated #{pln_atoms.size + ure_atoms.size} new facts"
       puts "Found #{parent_facts.size} parent relationships"
     end
 
     it "handles animal taxonomy reasoning" do
       atomspace = AtomSpace::AtomSpace.new
-      
+
       # Build biological taxonomy
       tv_scientific = AtomSpace::SimpleTruthValue.new(0.95, 0.9)
       tv_common = AtomSpace::SimpleTruthValue.new(0.85, 0.8)
@@ -158,7 +160,7 @@ describe "CrystalCog Integration Scenarios" do
 
     it "handles logical problem solving" do
       atomspace = AtomSpace::AtomSpace.new
-      
+
       # Classic logic puzzle: Knights and Knaves
       # Knights always tell the truth, Knaves always lie
 
@@ -224,7 +226,7 @@ describe "CrystalCog Integration Scenarios" do
 
     it "handles scientific reasoning" do
       atomspace = AtomSpace::AtomSpace.new
-      
+
       # Model basic physics/chemistry knowledge
       tv_law = AtomSpace::SimpleTruthValue.new(0.99, 0.95)
       tv_observation = AtomSpace::SimpleTruthValue.new(0.8, 0.8)
@@ -310,7 +312,7 @@ describe "CrystalCog Integration Scenarios" do
   describe "Multi-step reasoning workflows" do
     it "chains multiple reasoning steps" do
       atomspace = AtomSpace::AtomSpace.new
-      
+
       # Create a scenario requiring multiple reasoning steps
       tv_high = AtomSpace::SimpleTruthValue.new(0.9, 0.9)
 
@@ -362,7 +364,7 @@ describe "CrystalCog Integration Scenarios" do
 
     it "combines different types of knowledge" do
       atomspace = AtomSpace::AtomSpace.new
-      
+
       # Mix taxonomic, relational, and causal knowledge
       tv_strong = AtomSpace::SimpleTruthValue.new(0.9, 0.9)
       tv_medium = AtomSpace::SimpleTruthValue.new(0.7, 0.8)
@@ -430,7 +432,7 @@ describe "CrystalCog Integration Scenarios" do
 
     it "handles uncertainty propagation" do
       atomspace = AtomSpace::AtomSpace.new
-      
+
       # Test how uncertainty propagates through reasoning chains
 
       # Create chain with decreasing certainty
@@ -472,7 +474,7 @@ describe "CrystalCog Integration Scenarios" do
   describe "Performance and scalability integration" do
     it "handles realistic knowledge base sizes" do
       atomspace = AtomSpace::AtomSpace.new
-      
+
       # Create knowledge base with realistic complexity
       tv = AtomSpace::SimpleTruthValue.new(0.8, 0.9)
 
@@ -546,7 +548,7 @@ describe "CrystalCog Integration Scenarios" do
 
     it "maintains consistency across large operations" do
       atomspace = AtomSpace::AtomSpace.new
-      
+
       # Test consistency during large-scale operations
 
       # Create 1000 atoms in various configurations
@@ -573,6 +575,9 @@ describe "CrystalCog Integration Scenarios" do
       }.to_a
 
       puts "Large operation: created #{atomspace.size} atoms"
+      # Insertion returns existing canonical atoms for duplicate relationships.
+      expected_handles = large_set.map(&.handle).to_set
+      atomspace.size.should eq(expected_handles.size)
 
       # Verify all atoms are accessible
       all_atoms = atomspace.get_all_atoms
@@ -601,17 +606,15 @@ describe "CrystalCog Integration Scenarios" do
       puts "Large-scale reasoning: #{new_atoms.size} new atoms in #{duration.total_seconds.round(2)}s"
 
       # Should complete without corruption
-      # The test creates ~334 ConceptNodes and ~333 PredicateNodes (667 nodes total)
-      # plus InheritanceLinks (some may be duplicates due to random sampling)
-      # So we expect at least 667 atoms (the guaranteed unique nodes)
-      atomspace.size.should be >= 667
+      expected_handles.each { |handle| atomspace.get_atom(handle).should_not be_nil }
+      atomspace.size.should be >= expected_handles.size
     end
   end
 
   describe "Integration with external data patterns" do
     it "processes structured knowledge import" do
       atomspace = AtomSpace::AtomSpace.new
-      
+
       # Simulate importing structured knowledge (like from a database or API)
 
       # Knowledge structure: Product -> Category -> Department
@@ -697,7 +700,7 @@ describe "CrystalCog Integration Scenarios" do
 
     it "handles temporal reasoning patterns" do
       atomspace = AtomSpace::AtomSpace.new
-      
+
       # Model temporal relationships and events
       tv = AtomSpace::SimpleTruthValue.new(0.8, 0.85)
 

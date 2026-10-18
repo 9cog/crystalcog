@@ -36,7 +36,7 @@ module CrystalCogIntegration
   # External repository references
   EXTERNAL_REPOS = {
     "galatea" => "https://github.com/9cog/galatea-frontend",
-    "paphos"  => "https://github.com/9cog/paphos-backend"
+    "paphos"  => "https://github.com/9cog/paphos-backend",
   }
 
   # Main integration manager with cognitive agency coordination
@@ -153,19 +153,16 @@ module CrystalCogIntegration
         @cogpy_bridge.not_nil!.attach_atomspace(atomspace)
         @cogpy_bridge.not_nil!.connect
         link_to_agency("cogpy")
-
       when "pyg"
         @pyg_adapter = PygAdapter.create_default_adapter
         @pyg_adapter.not_nil!.attach_atomspace(atomspace)
         @pyg_adapter.not_nil!.initialize_backend
         link_to_agency("pyg")
-
       when "pygmalion"
         @pygmalion_agent = PygmalionAgent.create_default_agent
         @pygmalion_agent.not_nil!.attach_atomspace(atomspace)
         @pygmalion_agent.not_nil!.initialize_agent
         link_to_agency("pygmalion")
-
       when "galatea"
         grip_strength = config.try(&.["grip_strength"]?.try(&.to_i)) || 8
         mode = config.try(&.["mode"]) || "autonomous"
@@ -173,7 +170,7 @@ module CrystalCogIntegration
                    when "passive"    then :passive
                    when "active"     then :active
                    when "autonomous" then :autonomous
-                   else :active
+                   else                   :active
                    end
 
         @galatea_frontend = GalateaFrontend.create_cognitive_agency_interface(
@@ -184,14 +181,13 @@ module CrystalCogIntegration
         @galatea_frontend.not_nil!.initialize_interface
         @galatea_frontend.not_nil!.start
         link_to_agency("galatea")
-
       when "paphos"
         coordination_mode = config.try(&.["coordination_mode"]) || "peer"
         mode_sym = case coordination_mode
                    when "leader"   then :leader
                    when "follower" then :follower
                    when "peer"     then :peer
-                   else :peer
+                   else                 :peer
                    end
 
         @paphos_connector = PaphosBackend.create_cognitive_agency_connector(
@@ -200,18 +196,15 @@ module CrystalCogIntegration
         @paphos_connector.not_nil!.attach_atomspace(atomspace)
         @paphos_connector.not_nil!.initialize_connection
         link_to_agency("paphos")
-
       when "accelerator"
         @crystal_accelerator = CrystalAccelerator.create_high_performance_engine
         @crystal_accelerator.not_nil!.attach_atomspace(atomspace)
         @crystal_accelerator.not_nil!.initialize_engine
         link_to_agency("accelerator")
-
       when "cognitive_agency"
         # Already initialized above
         CogUtil::Logger.info("Cognitive agency controller ready")
-
-      # Phase 6 Extended Integrations
+        # Phase 6 Extended Integrations
       when "neo4j"
         host = config.try(&.["host"]) || "localhost"
         port = (config.try(&.["port"]) || "7474").to_i
@@ -223,7 +216,6 @@ module CrystalCogIntegration
         @neo4j_integration.not_nil!.initialize_backend
         link_to_agency("neo4j")
         CogUtil::Logger.info("Neo4j integration initialized")
-
       when "ipfs"
         host = config.try(&.["host"]) || "localhost"
         port = (config.try(&.["port"]) || "5001").to_i
@@ -233,7 +225,6 @@ module CrystalCogIntegration
         @ipfs_integration.not_nil!.initialize_backend
         link_to_agency("ipfs")
         CogUtil::Logger.info("IPFS integration initialized")
-
       when "metta"
         load_stdlib = config.try(&.["load_stdlib"]) != "false"
         max_steps = (config.try(&.["max_steps"]) || "1000").to_i
@@ -243,7 +234,6 @@ module CrystalCogIntegration
         @metta_integration.not_nil!.initialize_backend
         link_to_agency("metta")
         CogUtil::Logger.info("MeTTa integration initialized")
-
       when "typescript_sdk", "typescript", "sdk"
         host = config.try(&.["host"]) || "0.0.0.0"
         port = (config.try(&.["port"]) || "8080").to_i
@@ -254,7 +244,6 @@ module CrystalCogIntegration
         @typescript_sdk.not_nil!.initialize_backend
         link_to_agency("typescript_sdk")
         CogUtil::Logger.info("TypeScript SDK integration initialized")
-
       else
         CogUtil::Logger.error("Unknown integration: #{integration_name}")
       end
@@ -312,7 +301,7 @@ module CrystalCogIntegration
       # Add external repo info
       status["external_repos"] = {
         "galatea" => EXTERNAL_REPOS["galatea"],
-        "paphos" => EXTERNAL_REPOS["paphos"]
+        "paphos"  => EXTERNAL_REPOS["paphos"],
       }
 
       status
@@ -337,12 +326,19 @@ module CrystalCogIntegration
         accelerator.execute_accelerated("cognitive_pipeline") do
           # Process through Pygmalion for conversational understanding
           if agent = @pygmalion_agent
-            pygmalion_response = agent.chat(input)
-            result["pygmalion_response"] = pygmalion_response
+            begin
+              pygmalion_response = agent.chat(input)
+              result["pygmalion_response"] = pygmalion_response
 
-            # Feed response back through agency
-            if agency = @cognitive_agency
-              agency.process(pygmalion_response, "pygmalion")
+              # Feed response back through agency
+              if agency = @cognitive_agency
+                agency.process(pygmalion_response, "pygmalion")
+              end
+            rescue ex : IO::Error | Socket::Error
+              # The Pygmalion backend is an external service; the rest of the
+              # pipeline still runs without it.
+              CogUtil::Logger.warn("Pygmalion backend unavailable: #{ex.message}")
+              result["pygmalion_status"] = "unavailable"
             end
           end
 

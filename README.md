@@ -99,7 +99,7 @@ The test runner script provides comprehensive testing capabilities with automati
 
 ```bash
 # Build main executable
-crystal build src/crystalcog.cr
+crystal build src/bin/crystalcog.cr
 
 # Build specific components
 crystal build src/cogutil/cogutil.cr
@@ -146,7 +146,7 @@ The CogServer includes a comprehensive integration test that validates all netwo
 
 ```bash
 # Build the CogServer
-crystal build src/cogserver/cogserver_main.cr -o cogserver_bin
+crystal build src/bin/cogserver.cr -o cogserver_bin
 
 # Start CogServer for testing
 crystal run examples/tests/start_test_cogserver.cr &
@@ -189,17 +189,8 @@ CrystalCog implements the complete OpenCog stack:
 - **Persistence**: Multiple storage backends (File, SQLite, Network)
 - **Cognitive Kernels**: Agent-Zero Genesis cognitive processing units with hypergraph state persistence
 - **Tensor Field Encoding**: Mathematical sequence generators for cognitive state representation
-- **Integration Framework**: Seamless integration with external systems (CogPy/PyG, Pygmalion, Galatea, Paphos)
 
 ### Key Features
-
-#### Integration Framework
-- **CogPy Bridge**: Python cognitive processing framework integration
-- **PyG Adapter**: PyTorch Geometric graph neural networks integration
-- **Pygmalion Agent**: Advanced conversational AI with Echo State Networks
-- **Galatea Frontend**: Web-based interface with REST API and WebSocket support
-- **Paphos Backend**: Data persistence and service coordination
-- **Crystal Accelerator**: Performance optimization and caching layer
 
 #### AtomSpace Persistence
 - **RocksDB Storage**: High-performance key-value storage (0.9ms store, 0.5ms load)
@@ -263,31 +254,6 @@ hypergraph_encoding = kernel.hypergraph_tensor_encoding
 curl -X POST http://localhost:18080/storage/save
 ```
 
-#### Integration Framework Usage
-```crystal
-require "./src/integrations/integration"
-
-# Create AtomSpace
-atomspace = AtomSpace::AtomSpace.new
-
-# Initialize integration manager
-manager = CrystalCogIntegration.create_manager
-manager.initialize_all_integrations(atomspace)
-
-# Execute integrated cognitive pipeline
-result = manager.execute_cognitive_pipeline("What is intelligence?")
-puts result["status"]  # => "completed"
-
-# Check integration status
-status = manager.get_integration_status
-status.each do |name, component_status|
-  puts "#{name}: #{component_status["status"]}"
-end
-
-# Or use from command line
-# ./crystalcog integration
-```
-
 ## Validation & Dependency Checking
 
 CrystalCog includes comprehensive validation scripts to ensure your environment is correctly configured:
@@ -305,6 +271,8 @@ This validates:
 - All 9 profiling tool files exist
 - Executable permissions are correct
 - Script execution and output format
+- Dependency compatibility via `scripts/validation/check_dependencies.sh`
+- Guix package/environment validation via `scripts/validation/validate-guix-packages.sh`
 - Documentation completeness
 - Test suite coverage
 - Optional Crystal syntax validation (when Crystal is installed)
@@ -348,6 +316,9 @@ Run all validation checks at once:
 # Run profiling tools validation
 ./scripts/validation/validate_profiling_tools.sh
 
+# Run demo profiling tools validation
+./scripts/validation/validate-demo-profiling-tools.sh
+
 # Run dependency compatibility check
 ./scripts/validation/check_dependencies.sh
 
@@ -357,6 +328,7 @@ Run all validation checks at once:
 
 For detailed validation reports, see:
 - [Profiling Tools Validation Report](scripts/validation/PROFILING_TOOLS_VALIDATION_REPORT.md)
+- [Demo Profiling Tools Validation Report](docs/DEMO_PROFILING_TOOLS_VALIDATION.md)
 
 ## Production Deployment
 
@@ -418,6 +390,29 @@ docker-compose -f docker-compose.production.yml config
 
 ### Common Issues
 
+#### Database Dependencies Not Found
+
+If you encounter database linking errors during build or test, you can disable specific database backends using environment variables:
+
+```bash
+# Disable RocksDB (requires librocksdb-dev)
+export DISABLE_ROCKSDB=1
+
+# Disable SQLite3 (requires libsqlite3-dev)
+export DISABLE_SQLITE3=1
+
+# Disable PostgreSQL (requires libpq-dev)
+export DISABLE_POSTGRES=1
+
+# You can combine multiple flags:
+DISABLE_ROCKSDB=1 DISABLE_SQLITE3=1 DISABLE_POSTGRES=1 crystal spec
+
+# Or set them all in your shell profile for Windows builds:
+export DISABLE_ROCKSDB=1 DISABLE_SQLITE3=1 DISABLE_POSTGRES=1
+```
+
+When all database backends are disabled, use `MemoryStorageNode` or `FileStorageNode` for persistence.
+
 #### RocksDB Dependency Not Found
 
 If you encounter RocksDB linking errors during build or test:
@@ -431,7 +426,7 @@ export DISABLE_ROCKSDB=1
 
 # Or for individual commands:
 DISABLE_ROCKSDB=1 crystal spec spec/atomspace/
-DISABLE_ROCKSDB=1 crystal build src/crystalcog.cr
+DISABLE_ROCKSDB=1 crystal build src/bin/crystalcog.cr
 ```
 
 RocksDB is an optional high-performance storage backend. The system will use SQLite and PostgreSQL backends when RocksDB is disabled.
@@ -484,9 +479,6 @@ For complete documentation, see the [Documentation Index](docs/INDEX.md).
 - [Development Roadmap](docs/DEVELOPMENT-ROADMAP.md) - Project roadmap and implementation plan
 - [Crystal Installation Guide](docs/CRYSTAL_INSTALLATION.md) - Installation instructions
 - [API Documentation](docs/API_DOCUMENTATION.md) - Complete API reference
-- [Integration Guide](docs/INTEGRATION_GUIDE.md) - External system integration guide
-- [Integration API Reference](docs/INTEGRATION_API_REFERENCE.md) - Integration framework API
-- [Integration Implementation Summary](docs/INTEGRATION_IMPLEMENTATION_SUMMARY.md) - Integration framework overview
 - [Examples Guide](examples/README.md) - Example programs and usage
 - [Persistence API](docs/PERSISTENCE_API_DOCUMENTATION.md) - Storage backend documentation
 - [Advanced Pattern Matching](docs/ADVANCED_PATTERN_MATCHING.md) - Pattern matching guide

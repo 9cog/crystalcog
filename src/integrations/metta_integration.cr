@@ -137,11 +137,11 @@ module CrystalCog
       def initialize(value : Int32 | Int64 | Float64 | String | Bool)
         @value = JSON.parse(value.to_json)
         @value_type = case value
-                      when Int32, Int64   then "Number"
-                      when Float64        then "Float"
-                      when String         then "String"
-                      when Bool           then "Bool"
-                      else                     "Any"
+                      when Int32, Int64 then "Number"
+                      when Float64      then "Float"
+                      when String       then "String"
+                      when Bool         then "Bool"
+                      else                   "Any"
                       end
       end
 
@@ -606,6 +606,10 @@ module CrystalCog
         current
       end
 
+      # Bounds re-interpretation of rule rewrites so cyclic rules terminate
+      MAX_INTERPRET_DEPTH = 64
+      @interpret_depth = 0
+
       # Interpret/evaluate expression in this space
       def interpret(atom : MeTTaAtom) : Array(MeTTaAtom)
         case atom
@@ -665,8 +669,19 @@ module CrystalCog
             when "not"
               interpret_logical(atom, :not)
             else
-              # Try to apply rules
-              [reduce(atom)]
+              # Try to apply rules, then evaluate what they rewrote to
+              # (e.g. `(double 21)` -> `(* 2 21)` -> `42`)
+              reduced = reduce(atom)
+              if reduced.to_metta == atom.to_metta || @interpret_depth >= MAX_INTERPRET_DEPTH
+                [reduced] of MeTTaAtom
+              else
+                @interpret_depth += 1
+                begin
+                  interpret(reduced)
+                ensure
+                  @interpret_depth -= 1
+                end
+              end
             end
           else
             # Non-symbol head - evaluate all children
@@ -688,12 +703,12 @@ module CrystalCog
           end
         when MeTTaVariable
           if bindings = query(atom).first?
-            [bindings.apply(atom)]
+            [bindings.apply(atom)] of MeTTaAtom
           else
-            [atom]
+            [atom] of MeTTaAtom
           end
         else
-          [atom]
+          [atom] of MeTTaAtom
         end
       end
 
@@ -720,7 +735,7 @@ module CrystalCog
       end
 
       private def interpret_match(expr : MeTTaExpression) : Array(MeTTaAtom)
-        return [MeTTaError.new("match requires 3 arguments")] unless expr.size == 4
+        return [MeTTaError.new("match requires 3 arguments")] of MeTTaAtom unless expr.size == 4
 
         space_atom = expr[1]
         pattern = expr[2].not_nil!
@@ -730,20 +745,20 @@ module CrystalCog
         bindings_list = query(pattern)
 
         if bindings_list.empty?
-          [MeTTaEmpty.new]
+          [MeTTaEmpty.new] of MeTTaAtom
         else
           bindings_list.map { |b| b.apply(template) }
         end
       end
 
       private def interpret_let(expr : MeTTaExpression) : Array(MeTTaAtom)
-        return [MeTTaError.new("let requires 3 arguments")] unless expr.size == 4
+        return [MeTTaError.new("let requires 3 arguments")] of MeTTaAtom unless expr.size == 4
 
         var = expr[1]
         value_expr = expr[2].not_nil!
         body = expr[3].not_nil!
 
-        return [MeTTaError.new("let first arg must be variable")] unless var.is_a?(MeTTaVariable)
+        return [MeTTaError.new("let first arg must be variable")] of MeTTaAtom unless var.is_a?(MeTTaVariable)
 
         values = interpret(value_expr)
         results = [] of MeTTaAtom
@@ -754,16 +769,16 @@ module CrystalCog
           results.concat(interpret(bindings.apply(body)))
         end
 
-        results.empty? ? [MeTTaEmpty.new] : results
+        results.empty? ? [MeTTaEmpty.new] of MeTTaAtom : results
       end
 
       private def interpret_let_star(expr : MeTTaExpression) : Array(MeTTaAtom)
-        return [MeTTaError.new("let* requires 2 arguments")] unless expr.size == 3
+        return [MeTTaError.new("let* requires 2 arguments")] of MeTTaAtom unless expr.size == 3
 
         bindings_expr = expr[1]
         body = expr[2].not_nil!
 
-        return [MeTTaError.new("let* bindings must be expression")] unless bindings_expr.is_a?(MeTTaExpression)
+        return [MeTTaError.new("let* bindings must be expression")] of MeTTaAtom unless bindings_expr.is_a?(MeTTaExpression)
 
         current_bindings = MeTTaBindings.new
 
@@ -784,7 +799,7 @@ module CrystalCog
       end
 
       private def interpret_if(expr : MeTTaExpression) : Array(MeTTaAtom)
-        return [MeTTaError.new("if requires 3 arguments")] unless expr.size == 4
+        return [MeTTaError.new("if requires 3 arguments")] of MeTTaAtom unless expr.size == 4
 
         condition = expr[1].not_nil!
         then_branch = expr[2].not_nil!
@@ -801,11 +816,11 @@ module CrystalCog
           end
         end
 
-        results.empty? ? [MeTTaEmpty.new] : results
+        results.empty? ? [MeTTaEmpty.new] of MeTTaAtom : results
       end
 
       private def interpret_case(expr : MeTTaExpression) : Array(MeTTaAtom)
-        return [MeTTaError.new("case requires at least 2 arguments")] unless expr.size >= 3
+        return [MeTTaError.new("case requires at least 2 arguments")] of MeTTaAtom unless expr.size >= 3
 
         scrutinee = expr[1].not_nil!
         cases = expr.children[2..]
@@ -827,36 +842,36 @@ module CrystalCog
           end
         end
 
-        results.empty? ? [MeTTaEmpty.new] : results
+        results.empty? ? [MeTTaEmpty.new] of MeTTaAtom : results
       end
 
       private def interpret_quote(expr : MeTTaExpression) : Array(MeTTaAtom)
-        return [MeTTaError.new("quote requires 1 argument")] unless expr.size == 2
+        return [MeTTaError.new("quote requires 1 argument")] of MeTTaAtom unless expr.size == 2
         [expr[1].not_nil!]
       end
 
       private def interpret_unquote(expr : MeTTaExpression) : Array(MeTTaAtom)
-        return [MeTTaError.new("unquote requires 1 argument")] unless expr.size == 2
+        return [MeTTaError.new("unquote requires 1 argument")] of MeTTaAtom unless expr.size == 2
         interpret(expr[1].not_nil!)
       end
 
       private def interpret_collapse(expr : MeTTaExpression) : Array(MeTTaAtom)
-        return [MeTTaError.new("collapse requires 1 argument")] unless expr.size == 2
+        return [MeTTaError.new("collapse requires 1 argument")] of MeTTaAtom unless expr.size == 2
         results = interpret(expr[1].not_nil!)
-        [MeTTaExpression.new(results)]
+        [MeTTaExpression.new(results)] of MeTTaAtom
       end
 
       private def interpret_superpose(expr : MeTTaExpression) : Array(MeTTaAtom)
-        return [MeTTaError.new("superpose requires 1 argument")] unless expr.size == 2
+        return [MeTTaError.new("superpose requires 1 argument")] of MeTTaAtom unless expr.size == 2
 
         arg = expr[1]
-        return [MeTTaEmpty.new] unless arg.is_a?(MeTTaExpression)
+        return [MeTTaEmpty.new] of MeTTaAtom unless arg.is_a?(MeTTaExpression)
 
         arg.children.flat_map { |child| interpret(child) }
       end
 
       private def interpret_equality(expr : MeTTaExpression) : Array(MeTTaAtom)
-        return [MeTTaError.new("= requires 2 arguments")] unless expr.size == 3
+        return [MeTTaError.new("= requires 2 arguments")] of MeTTaAtom unless expr.size == 3
 
         pattern = expr[1].not_nil!
         template = expr[2].not_nil!
@@ -865,27 +880,27 @@ module CrystalCog
         rule = MeTTaRule.new("user-rule-#{@rules.size}", pattern, template)
         add_rule(rule)
 
-        [MeTTaEmpty.new]
+        [MeTTaEmpty.new] of MeTTaAtom
       end
 
       private def interpret_add_atom(expr : MeTTaExpression) : Array(MeTTaAtom)
-        return [MeTTaError.new("add-atom requires 2 arguments")] unless expr.size == 3
+        return [MeTTaError.new("add-atom requires 2 arguments")] of MeTTaAtom unless expr.size == 3
 
         atom = expr[2].not_nil!
         add(atom)
-        [MeTTaEmpty.new]
+        [MeTTaEmpty.new] of MeTTaAtom
       end
 
       private def interpret_remove_atom(expr : MeTTaExpression) : Array(MeTTaAtom)
-        return [MeTTaError.new("remove-atom requires 2 arguments")] unless expr.size == 3
+        return [MeTTaError.new("remove-atom requires 2 arguments")] of MeTTaAtom unless expr.size == 3
 
         atom = expr[2].not_nil!
         remove(atom)
-        [MeTTaEmpty.new]
+        [MeTTaEmpty.new] of MeTTaAtom
       end
 
       private def interpret_get_atoms(expr : MeTTaExpression) : Array(MeTTaAtom)
-        [MeTTaExpression.new(@atoms.dup)]
+        [MeTTaExpression.new(@atoms.dup)] of MeTTaAtom
       end
 
       private def interpret_arithmetic(expr : MeTTaExpression, op : Symbol) : Array(MeTTaAtom)
@@ -898,7 +913,7 @@ module CrystalCog
           end
         end
 
-        return [MeTTaError.new("Arithmetic requires numeric arguments")] if numbers.size != args.size
+        return [MeTTaError.new("Arithmetic requires numeric arguments")] of MeTTaAtom if numbers.size != args.size
 
         result = case op
                  when :add then numbers.reduce(0.0) { |acc, n| acc + n }
@@ -908,11 +923,11 @@ module CrystalCog
                  else           0.0
                  end
 
-        [MeTTaGrounded.new(result)]
+        [MeTTaGrounded.new(result)] of MeTTaAtom
       end
 
       private def interpret_comparison(expr : MeTTaExpression, op : Symbol) : Array(MeTTaAtom)
-        return [MeTTaError.new("Comparison requires 2 arguments")] unless expr.size == 3
+        return [MeTTaError.new("Comparison requires 2 arguments")] of MeTTaAtom unless expr.size == 3
 
         left_results = interpret(expr[1].not_nil!)
         right_results = interpret(expr[2].not_nil!)
@@ -939,35 +954,35 @@ module CrystalCog
           end
         end
 
-        results.empty? ? [MeTTaError.new("Comparison failed")] : results
+        results.empty? ? [MeTTaError.new("Comparison failed")] of MeTTaAtom : results
       end
 
       private def interpret_logical(expr : MeTTaExpression, op : Symbol) : Array(MeTTaAtom)
         case op
         when :not
-          return [MeTTaError.new("not requires 1 argument")] unless expr.size == 2
+          return [MeTTaError.new("not requires 1 argument")] of MeTTaAtom unless expr.size == 2
           results = interpret(expr[1].not_nil!)
-          results.map { |r| MeTTaSymbol.new(is_truthy?(r) ? "False" : "True") }
+          results.map { |r| MeTTaSymbol.new(is_truthy?(r) ? "False" : "True").as(MeTTaAtom) }
         when :and
           args = expr.tail
           all_true = args.all? do |arg|
             interpret(arg).all? { |r| is_truthy?(r) }
           end
-          [MeTTaSymbol.new(all_true ? "True" : "False")]
+          [MeTTaSymbol.new(all_true ? "True" : "False")] of MeTTaAtom
         when :or
           args = expr.tail
           any_true = args.any? do |arg|
             interpret(arg).any? { |r| is_truthy?(r) }
           end
-          [MeTTaSymbol.new(any_true ? "True" : "False")]
+          [MeTTaSymbol.new(any_true ? "True" : "False")] of MeTTaAtom
         else
-          [MeTTaError.new("Unknown logical operation")]
+          [MeTTaError.new("Unknown logical operation")] of MeTTaAtom
         end
       end
 
       private def is_truthy?(atom : MeTTaAtom) : Bool
         case atom
-        when MeTTaSymbol  then atom.name != "False" && atom.name != "Nil"
+        when MeTTaSymbol then atom.name != "False" && atom.name != "Nil"
         when MeTTaGrounded
           if b = atom.as_bool
             b
@@ -1366,18 +1381,18 @@ module CrystalCog
         space = @interpreter.space
 
         {
-          "integration"            => "metta",
-          "version"                => VERSION,
-          "status"                 => @initialized ? "ready" : "not_initialized",
-          "atomspace_attached"     => (!@atomspace.nil?).to_s,
-          "stdlib_loaded"          => @config.load_stdlib.to_s,
-          "space_name"             => space.@name,
-          "space_size"             => space.size.to_s,
-          "expressions_evaluated"  => @expressions_evaluated.to_s,
-          "rules_defined"          => @rules_defined.to_s,
-          "patterns_matched"       => @patterns_matched.to_s,
-          "max_reduction_steps"    => @config.max_reduction_steps.to_s,
-          "trace_enabled"          => @config.enable_trace.to_s,
+          "integration"           => "metta",
+          "version"               => VERSION,
+          "status"                => @initialized ? "ready" : "not_initialized",
+          "atomspace_attached"    => (!@atomspace.nil?).to_s,
+          "stdlib_loaded"         => @config.load_stdlib.to_s,
+          "space_name"            => space.@name,
+          "space_size"            => space.size.to_s,
+          "expressions_evaluated" => @expressions_evaluated.to_s,
+          "rules_defined"         => @rules_defined.to_s,
+          "patterns_matched"      => @patterns_matched.to_s,
+          "max_reduction_steps"   => @config.max_reduction_steps.to_s,
+          "trace_enabled"         => @config.enable_trace.to_s,
         }
       end
 

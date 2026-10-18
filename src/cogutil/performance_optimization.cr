@@ -7,11 +7,14 @@ module CogUtil
   # Reduces GC pressure and improves cache locality
   class AtomMemoryPool
     # Pool configuration
-    POOL_SIZE = 10000
-    BLOCK_SIZE = 128  # bytes per block
-    TOTAL_SIZE = 1280000  # POOL_SIZE * BLOCK_SIZE
+    POOL_SIZE  =   10000
+    BLOCK_SIZE =     128 # bytes per block
+    TOTAL_SIZE = 1280000 # POOL_SIZE * BLOCK_SIZE
 
-    @blocks : StaticArray(UInt8, TOTAL_SIZE)
+    # A large StaticArray is returned/copied by value during initialization,
+    # triggering LLVM SelectionDAG failures. Bytes owns a contiguous GC-backed
+    # buffer and keeps its address stable without giant stack/SSA aggregates.
+    @blocks : Bytes
     @free_blocks : Array(Int32)
     @allocated_blocks : Set(Int32)
     @mutex : Mutex
@@ -47,7 +50,7 @@ module CogUtil
     end
 
     def initialize
-      @blocks = StaticArray(UInt8, TOTAL_SIZE).new(0_u8)
+      @blocks = Bytes.new(TOTAL_SIZE, 0_u8)
       @free_blocks = Array(Int32).new(POOL_SIZE) { |i| i }
       @allocated_blocks = Set(Int32).new
       @mutex = Mutex.new
@@ -95,7 +98,8 @@ module CogUtil
 
         # Calculate block index
         offset = ptr - pool_start
-        block_index = offset // BLOCK_SIZE
+        return false unless offset % BLOCK_SIZE == 0
+        block_index = (offset // BLOCK_SIZE).to_i32
 
         if @allocated_blocks.includes?(block_index)
           @allocated_blocks.delete(block_index)
@@ -130,12 +134,12 @@ module CogUtil
     def health_check : Hash(String, Bool | Float64 | Int32)
       stats = self.stats
       {
-        "healthy" => stats.utilization_percentage < 90.0,
+        "healthy"             => stats.utilization_percentage < 90.0,
         "utilization_percent" => stats.utilization_percentage,
-        "hit_rate_percent" => stats.hit_rate,
-        "peak_usage" => stats.peak_usage,
-        "current_usage" => stats.current_usage,
-        "fragmentation_low" => @free_blocks.size + @allocated_blocks.size == POOL_SIZE
+        "hit_rate_percent"    => stats.hit_rate,
+        "peak_usage"          => stats.peak_usage,
+        "current_usage"       => stats.current_usage,
+        "fragmentation_low"   => @free_blocks.size + @allocated_blocks.size == POOL_SIZE,
       }
     end
 
@@ -148,7 +152,7 @@ module CogUtil
   class CognitiveCache(K, V)
     # Cache configuration optimized for cognitive workloads
     DEFAULT_CAPACITY = 8192
-    LOAD_FACTOR = 0.75
+    LOAD_FACTOR      = 0.75
 
     @buckets : Array(Array(Entry(K, V)))
     @capacity : Int32
@@ -306,8 +310,8 @@ module CogUtil
     end
 
     private def hash_key(key : K) : UInt32
-      # Use Crystal's built-in hash for type safety
-      key.hash.to_u32
+      # Use Crystal's built-in hash; truncate without overflow checks
+      key.hash.to_u32!
     end
 
     private def resize_if_needed
@@ -353,7 +357,7 @@ module CogUtil
       # Process 4 elements at a time (SIMD-friendly)
       i = 0
       while i + 3 < size
-        result += a[i] * b[i] + a[i+1] * b[i+1] + a[i+2] * b[i+2] + a[i+3] * b[i+3]
+        result += a[i] * b[i] + a[i + 1] * b[i + 1] + a[i + 2] * b[i + 2] + a[i + 3] * b[i + 3]
         i += 4
       end
 
@@ -377,9 +381,9 @@ module CogUtil
       i = 0
       while i + 3 < size
         result << tensor[i] * weights[i]
-        result << tensor[i+1] * weights[i+1]
-        result << tensor[i+2] * weights[i+2]
-        result << tensor[i+3] * weights[i+3]
+        result << tensor[i + 1] * weights[i + 1]
+        result << tensor[i + 2] * weights[i + 2]
+        result << tensor[i + 3] * weights[i + 3]
         i += 4
       end
 

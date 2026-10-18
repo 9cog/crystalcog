@@ -5,6 +5,8 @@
 # Usage: ./scripts/test-runner.sh [OPTIONS]
 
 set -e
+# Trace every command so CI logs show what ran.
+set -x
 
 # Colors for output
 RED='\033[0;31m'
@@ -177,7 +179,7 @@ check_crystal() {
 install_dependencies() {
     print_status "Installing Crystal dependencies..."
     if [ -f "shard.yml" ]; then
-        shards install
+        shards install --frozen
         print_success "Dependencies installed successfully"
     else
         print_warning "No shard.yml found, skipping dependency installation"
@@ -189,7 +191,7 @@ run_lint() {
     print_status "Running code linting and formatting checks..."
     
     # Format check
-    if crystal tool format --check src/ spec/ 2>/dev/null; then
+    if crystal tool format --check src/ spec/; then
         print_success "Code formatting is correct"
     else
         print_warning "Code formatting issues found. Run: crystal tool format src/ spec/"
@@ -197,7 +199,7 @@ run_lint() {
     
     # Static analysis (basic)
     print_status "Running static analysis..."
-    if crystal build --no-codegen --warnings-as-errors src/crystalcog.cr 2>/dev/null; then
+    if crystal build --verbose --stats --no-codegen --warnings-as-errors src/bin/crystalcog.cr; then
         print_success "Static analysis passed"
     else
         print_warning "Static analysis found potential issues"
@@ -211,9 +213,9 @@ build_targets() {
     # Main executable
     print_status "Building main executable..."
     # Try building with RocksDB first, fallback to disabled version
-    if ! crystal build --error-trace src/crystalcog.cr 2>/dev/null; then
+    if ! crystal build --verbose --stats --error-trace src/bin/crystalcog.cr; then
         print_warning "Build failed, trying without RocksDB..."
-        DISABLE_ROCKSDB=1 crystal build --error-trace src/crystalcog.cr || print_error "Main build failed"
+        DISABLE_ROCKSDB=1 crystal build --verbose --stats --error-trace src/bin/crystalcog.cr || print_error "Main build failed"
     fi
     
     # Component libraries - use new target names to avoid directory conflicts
@@ -221,9 +223,9 @@ build_targets() {
         if [ -f "src/${target}/${target}.cr" ]; then
             print_status "Building ${target}_bin..."
             # Try building with RocksDB first, fallback to disabled version
-            if ! crystal build --error-trace "src/${target}/${target}.cr" -o "${target}_bin" 2>/dev/null; then
+            if ! crystal build --verbose --stats --error-trace "src/${target}/${target}.cr" -o "${target}_bin"; then
                 print_warning "Build failed, trying without RocksDB..."
-                DISABLE_ROCKSDB=1 crystal build --error-trace "src/${target}/${target}.cr" -o "${target}_bin" || print_warning "${target} build failed"
+                DISABLE_ROCKSDB=1 crystal build --verbose --stats --error-trace "src/${target}/${target}.cr" -o "${target}_bin" || print_warning "${target} build failed"
             fi
         fi
     done
@@ -243,7 +245,7 @@ run_unit_tests() {
     if [ -n "$COMPONENT" ]; then
         if [ -d "spec/$COMPONENT" ]; then
             print_status "Running tests for component: $COMPONENT"
-            if crystal spec $spec_args --error-trace "spec/$COMPONENT/" 2>&1; then
+            if crystal spec --stats -v $spec_args --error-trace "spec/$COMPONENT/" 2>&1; then
                 print_success "Component tests passed"
             else
                 print_warning "Component tests failed"
@@ -259,21 +261,21 @@ run_unit_tests() {
         local passed=0
         
         # Find all spec files
-        for spec_file in $(find spec/ -name "*.cr" -type f | sort); do
+        for spec_file in $(find spec/ -name "*_spec.cr" -type f | sort); do
             print_status "Running: $spec_file"
-            if crystal spec $spec_args --error-trace "$spec_file" 2>&1; then
+            if crystal spec --stats -v $spec_args --error-trace "$spec_file" 2>&1; then
                 print_success "✓ $spec_file"
-                ((passed++))
+                passed=$((passed + 1))
             else
-                print_warning "✗ $spec_file (skipped due to syntax or dependency issues)"
-                ((failed++))
+                print_error "✗ $spec_file failed"
+                failed=$((failed + 1))
             fi
         done
         
         print_status "Test results: $passed passed, $failed failed"
         
-        if [ $failed -gt $passed ]; then
-            print_error "More tests failed than passed"
+        if [ $failed -gt 0 ]; then
+            print_error "One or more spec files failed"
             return 1
         fi
     fi
@@ -294,10 +296,10 @@ run_integration_tests() {
             print_status "Running $test_file..."
             if crystal run --error-trace "$test_file"; then
                 print_success "$test_file passed"
-                ((passed++))
+                passed=$((passed + 1))
             else
                 print_error "$test_file failed"
-                ((failed++))
+                failed=$((failed + 1))
             fi
         fi
     done

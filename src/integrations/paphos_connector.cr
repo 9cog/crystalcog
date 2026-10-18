@@ -32,8 +32,8 @@ module PaphosBackend
     property postgresql_compatible : Bool
     property lucky_api_prefix : String
     property cognitive_agency_sync : Bool
-    property grip_coordination_mode : Symbol  # :leader, :follower, :peer
-    property state_sync_interval : Int32      # seconds
+    property grip_coordination_mode : Symbol # :leader, :follower, :peer
+    property state_sync_interval : Int32     # seconds
     property event_streaming_enabled : Bool
     property batch_operations : Bool
 
@@ -70,10 +70,10 @@ module PaphosBackend
 
     def initialize(@coordination_mode = :peer)
       @grip_state = {
-        "coherence" => 0.9,
+        "coherence"       => 0.9,
         "synchronization" => 0.8,
-        "authority" => 0.7,
-        "responsiveness" => 0.85
+        "authority"       => 0.7,
+        "responsiveness"  => 0.85,
       }
       @peer_states = {} of String => Hash(String, Float64)
       @consensus_threshold = 0.7
@@ -86,10 +86,10 @@ module PaphosBackend
       CogUtil::Logger.debug("Coordinating cognitive grip (mode: #{@coordination_mode})")
 
       coordination_result = {
-        "mode" => @coordination_mode.to_s,
+        "mode"                => @coordination_mode.to_s,
         "local_grip_received" => "true",
-        "coherence" => @grip_state["coherence"].to_s,
-        "consensus_reached" => "true"
+        "coherence"           => @grip_state["coherence"].to_s,
+        "consensus_reached"   => "true",
       }
 
       # Update grip state based on local input
@@ -149,9 +149,9 @@ module PaphosBackend
     # Record synchronization event
     def record_sync_event(event_type : String, data : Hash(String, String))
       event = {
-        "type" => event_type,
+        "type"      => event_type,
         "timestamp" => Time.utc.to_s,
-        "peers" => @peer_states.size.to_s
+        "peers"     => @peer_states.size.to_s,
       }.merge(data)
 
       @sync_history << event
@@ -165,13 +165,13 @@ module PaphosBackend
     # Get coordinator status
     def status : Hash(String, String)
       {
-        "coordination_mode" => @coordination_mode.to_s,
-        "coherence" => @grip_state["coherence"].to_s,
-        "synchronization" => @grip_state["synchronization"].to_s,
-        "peer_count" => @peer_states.size.to_s,
-        "consensus_reached" => consensus_reached?.to_s,
-        "last_sync" => @last_sync.to_s,
-        "sync_history_count" => @sync_history.size.to_s
+        "coordination_mode"  => @coordination_mode.to_s,
+        "coherence"          => @grip_state["coherence"].to_s,
+        "synchronization"    => @grip_state["synchronization"].to_s,
+        "peer_count"         => @peer_states.size.to_s,
+        "consensus_reached"  => consensus_reached?.to_s,
+        "last_sync"          => @last_sync.to_s,
+        "sync_history_count" => @sync_history.size.to_s,
       }
     end
   end
@@ -287,7 +287,7 @@ module PaphosBackend
       data = {
         "operation" => "store_atomspace",
         "timestamp" => Time.utc.to_s,
-        "format" => "postgresql_jsonb"
+        "format"    => "postgresql_jsonb",
       }
 
       @batch_queue << data
@@ -318,9 +318,9 @@ module PaphosBackend
       CogUtil::Logger.info("Storing cognitive snapshot: #{snapshot_id}")
 
       snapshot_data = data.merge({
-        "snapshot_id" => snapshot_id,
-        "created_at" => Time.utc.to_s,
-        "storage_format" => "postgresql_jsonb"
+        "snapshot_id"    => snapshot_id,
+        "created_at"     => Time.utc.to_s,
+        "storage_format" => "postgresql_jsonb",
       })
 
       @batch_queue << snapshot_data
@@ -347,9 +347,9 @@ module PaphosBackend
       # Return mock loaded snapshot
       {
         "snapshot_id" => snapshot_id,
-        "loaded_at" => Time.utc.to_s,
-        "status" => "loaded",
-        "source" => "paphos_postgresql"
+        "loaded_at"   => Time.utc.to_s,
+        "status"      => "loaded",
+        "source"      => "paphos_postgresql",
       }
     end
 
@@ -362,8 +362,8 @@ module PaphosBackend
       # Add query result
       results << {
         "query_processed" => "true",
-        "backend" => "paphos_postgresql",
-        "timestamp" => Time.utc.to_s
+        "backend"         => "paphos_postgresql",
+        "timestamp"       => Time.utc.to_s,
       }
 
       results
@@ -388,10 +388,10 @@ module PaphosBackend
     # Get persistence status
     def status : Hash(String, String)
       {
-        "cache_enabled" => @cache_enabled.to_s,
-        "cache_size" => @cache.size.to_s,
-        "batch_queue_size" => @batch_queue.size.to_s,
-        "atomspace_attached" => (!@atomspace.nil?).to_s
+        "cache_enabled"      => @cache_enabled.to_s,
+        "cache_size"         => @cache.size.to_s,
+        "batch_queue_size"   => @batch_queue.size.to_s,
+        "atomspace_attached" => (!@atomspace.nil?).to_s,
       }
     end
   end
@@ -434,9 +434,9 @@ module PaphosBackend
       return false unless @connected
 
       event = {
-        "type" => event_type,
+        "type"      => event_type,
         "timestamp" => Time.utc.to_s,
-        "source" => "crystalcog"
+        "source"    => "crystalcog",
       }.merge(data)
 
       @event_queue << event
@@ -477,9 +477,9 @@ module PaphosBackend
     # Get stream status
     def status : Hash(String, String)
       {
-        "connected" => @connected.to_s,
-        "queue_size" => @event_queue.size.to_s,
-        "subscriptions" => @subscriptions.join(",")
+        "connected"     => @connected.to_s,
+        "queue_size"    => @event_queue.size.to_s,
+        "subscriptions" => @subscriptions.join(","),
       }
     end
   end
@@ -554,16 +554,16 @@ module PaphosBackend
       if @config.event_streaming_enabled
         @event_stream.publish_event("command_execution", {
           "command" => command,
-          "status" => "executed"
+          "status"  => "executed",
         })
       end
 
       {
-        "status" => "success",
-        "command" => command,
-        "result" => "Command executed with cognitive coordination",
+        "status"      => "success",
+        "command"     => command,
+        "result"      => "Command executed with cognitive coordination",
         "api_version" => API_VERSION,
-        "coherence" => coordination["coherence"]? || "0.9"
+        "coherence"   => coordination["coherence"]? || "0.9",
       }
     end
 
@@ -580,8 +580,8 @@ module PaphosBackend
 
       # Get current grip state
       grip_state = {
-        "coherence" => @cognitive_coordinator.grip_state["coherence"].to_s,
-        "synchronization" => @cognitive_coordinator.grip_state["synchronization"].to_s
+        "coherence"       => @cognitive_coordinator.grip_state["coherence"].to_s,
+        "synchronization" => @cognitive_coordinator.grip_state["synchronization"].to_s,
       }
 
       # Store current state
@@ -595,8 +595,8 @@ module PaphosBackend
       # Publish sync event
       if @config.event_streaming_enabled
         @event_stream.publish_event("state_sync", {
-          "status" => "completed",
-          "atomspace_synced" => (!@atomspace.nil?).to_s
+          "status"           => "completed",
+          "atomspace_synced" => (!@atomspace.nil?).to_s,
         })
       end
 
@@ -621,9 +621,9 @@ module PaphosBackend
       CogUtil::Logger.info("Storing cognitive snapshot: #{snapshot_id}")
 
       snapshot_data = {
-        "grip_state" => @cognitive_coordinator.grip_state.to_json,
+        "grip_state"        => @cognitive_coordinator.grip_state.to_json,
         "coordination_mode" => @config.grip_coordination_mode.to_s,
-        "timestamp" => Time.utc.to_s
+        "timestamp"         => Time.utc.to_s,
       }
 
       @persistence.store_snapshot(snapshot_id, snapshot_data)
@@ -637,15 +637,15 @@ module PaphosBackend
     # Get comprehensive connector status
     def status : Hash(String, String)
       base_status = {
-        "connector_status" => @connected ? "connected" : "disconnected",
-        "backend_url" => @config.backend_url,
-        "api_prefix" => @config.lucky_api_prefix,
-        "api_version" => API_VERSION,
-        "external_repo" => EXTERNAL_REPO,
-        "authenticated" => @auth_handler.authenticated.to_s,
-        "caching_enabled" => @config.enable_caching.to_s,
-        "atomspace_attached" => (@atomspace.nil? ? "false" : "true"),
-        "grip_coordination_mode" => @config.grip_coordination_mode.to_s
+        "connector_status"       => @connected ? "connected" : "disconnected",
+        "backend_url"            => @config.backend_url,
+        "api_prefix"             => @config.lucky_api_prefix,
+        "api_version"            => API_VERSION,
+        "external_repo"          => EXTERNAL_REPO,
+        "authenticated"          => @auth_handler.authenticated.to_s,
+        "caching_enabled"        => @config.enable_caching.to_s,
+        "atomspace_attached"     => (@atomspace.nil? ? "false" : "true"),
+        "grip_coordination_mode" => @config.grip_coordination_mode.to_s,
       }
 
       # Merge coordinator and stream status

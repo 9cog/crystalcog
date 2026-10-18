@@ -24,6 +24,8 @@ module Attention
     TARGET_LTI_FUNDS          =  10000_i16 # Global LTI fund target
     MIN_STI                   = -32768_i16 # Minimum STI value
     MAX_STI                   =  32767_i16 # Maximum STI value
+    DEFAULT_DECAY_RATE        =    0.1_f64 # Default exponential forgetting rate
+    DEFAULT_FORGET_THRESHOLD  =      0_i16 # STI below which hybrid forget zeros atoms
   end
 
   # Priority levels for attention allocation
@@ -84,17 +86,19 @@ module Attention
     def diffuse_to(targets : Array(AttentionMetrics), max_spread : Float64 = ECANParams::MAX_SPREAD_PERCENTAGE)
       return if targets.empty?
 
-      # Amount of STI to spread
-      spread_amount = (sti.to_f64 * max_spread / targets.size).round.to_i16
-
+      # Amount of STI to spread (use wider ints to avoid Int16 overflow)
+      spread_amount = (sti.to_f64 * max_spread / targets.size).round.to_i32
       return if spread_amount <= 0
 
       # Reduce own STI
-      @sti = Math.max(ECANParams::MIN_STI, @sti - (spread_amount * targets.size))
+      total_spread = spread_amount * targets.size
+      @sti = Math.max(ECANParams::MIN_STI.to_i32, @sti.to_i32 - total_spread).to_i16
 
-      # Increase target STIs
-      targets.each do |target|
-        target.sti = Math.min(ECANParams::MAX_STI, target.sti + spread_amount)
+      # Increase target STIs (reassign because AttentionMetrics is a struct)
+      targets.each_with_index do |target, i|
+        new_sti = Math.min(ECANParams::MAX_STI.to_i32, target.sti.to_i32 + spread_amount)
+        target.sti = new_sti.to_i16
+        targets[i] = target
       end
     end
 

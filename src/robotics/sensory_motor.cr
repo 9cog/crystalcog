@@ -208,6 +208,12 @@ module Robotics
       @ranges = ranges
     end
 
+    # ROS range messages commonly carry Float32 samples. Normalize them at the
+    # boundary so readings keep the module's Float64 representation.
+    def set_ranges(ranges : Array(Float32))
+      @ranges = ranges.map(&.to_f64)
+    end
+
     def get_range_at_angle(angle : Float64) : Float64?
       return nil unless angle >= @angle_min && angle <= @angle_max
       index = ((@num_readings - 1) * (angle - @angle_min) / (@angle_max - @angle_min)).to_i

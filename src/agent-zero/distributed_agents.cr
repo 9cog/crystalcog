@@ -29,7 +29,7 @@ module AgentZero
     property trust_level : Float64
 
     @peers : Hash(String, PeerInfo)
-    @message_handlers : Hash(String, Proc(Message, Nil))
+    @message_handlers : Hash(String, Proc(Message, TCPSocket?, Nil))
     @server : TCPServer?
     @running : Bool = false
 
@@ -42,7 +42,7 @@ module AgentZero
       Failed
     end
 
-    struct PeerInfo
+    class PeerInfo
       property id : String
       property host : String
       property port : Int32
@@ -75,7 +75,7 @@ module AgentZero
       @capabilities = ["reasoning", "learning", "memory", "communication"]
       @trust_level = 1.0
       @peers = Hash(String, PeerInfo).new
-      @message_handlers = Hash(String, Proc(Message, Nil)).new
+      @message_handlers = Hash(String, Proc(Message, TCPSocket?, Nil)).new
 
       # Auto-assign port if not specified
       @port = find_available_port if @port == 0
@@ -88,11 +88,14 @@ module AgentZero
     def start
       return if @running
 
+      # Bind the server socket synchronously so peers can connect immediately
+      # after start returns. The accept loop still runs in a fiber.
+      @server = TCPServer.new(@host, @port)
       @running = true
       @status = AgentStatus::Active
 
       spawn do
-        start_server
+        accept_connections
       end
 
       spawn do
@@ -109,63 +112,85 @@ module AgentZero
       @running = false
       @status = AgentStatus::Offline
 
-      # Send goodbye messages to peers
-      broadcast_message(Message.new("agent_goodbye", @id, {
-        "agent_id" => @id,
-        "name" => @name,
-        "timestamp" => Time.utc.to_rfc3339
-      }))
+      # Best-effort goodbye. Peers may already be offline during coordinated
+      # shutdown, so connection failures here are expected and not logged as errors.
+      goodbye = Message.new("agent_goodbye", @id, {
+        "agent_id"  => @id,
+        "name"      => @name,
+        "timestamp" => Time.utc.to_rfc3339,
+      })
+      @peers.each_value do |peer|
+        begin
+          socket = TCPSocket.new(peer.host, peer.port)
+          socket.puts(goodbye.to_json)
+          socket.close
+        rescue
+          # Peer already gone during shutdown races
+        end
+      end
+      @peers.clear
 
       @server.try(&.close)
       CogUtil::Logger.info("AgentNode #{@name} stopped")
     end
 
-    # Connect to another agent
-    def connect_to_peer(host : String, port : Int32) : Bool
-      begin
-        socket = TCPSocket.new(host, port)
+    # Connect to another agent. Retries briefly to tolerate slow peer startup.
+    def connect_to_peer(host : String, port : Int32, retries : Int32 = 5) : Bool
+      last_error : String? = nil
 
-        # Send introduction message
-        intro_message = Message.new("agent_introduction", @id, {
-          "agent_id" => @id,
-          "name" => @name,
-          "host" => @host,
-          "port" => @port,
-          "capabilities" => @capabilities,
-          "trust_level" => @trust_level,
-          "timestamp" => Time.utc.to_rfc3339
-        })
+      retries.times do |attempt|
+        socket = nil
+        begin
+          socket = TCPSocket.new(host, port)
+          socket.read_timeout = 10.seconds
+          # Send introduction message
+          intro_message = Message.new("agent_introduction", @id, {
+            "agent_id"     => @id,
+            "name"         => @name,
+            "host"         => @host,
+            "port"         => @port,
+            "capabilities" => @capabilities,
+            "trust_level"  => @trust_level,
+            "timestamp"    => Time.utc.to_rfc3339,
+          })
 
-        socket.puts(intro_message.to_json)
+          socket.puts(intro_message.to_json)
 
-        # Wait for response
-        response_data = socket.gets
-        if response_data
-          response = Message.from_json(response_data)
-          if response.type == "agent_introduction_response" && response.payload["status"] == "accepted"
-            peer_info = PeerInfo.new(
-              response.sender_id,
-              response.payload["host"].as_s,
-              response.payload["port"].as_i,
-              response.payload["name"].as_s
-            )
-            peer_info.capabilities = response.payload["capabilities"].as_a.map(&.as_s)
-            peer_info.trust_level = response.payload["trust_level"].as_f
+          # Wait for response
+          response_data = socket.gets
+          if response_data
+            response = Message.from_json(response_data)
+            if response.type == "agent_introduction_response" && response.payload["status"] == "accepted"
+              peer_info = PeerInfo.new(
+                response.sender_id,
+                response.payload["host"].as_s,
+                response.payload["port"].as_i,
+                response.payload["name"].as_s
+              )
+              peer_info.capabilities = response.payload["capabilities"].as_a.map(&.as_s)
+              peer_info.trust_level = response.payload["trust_level"].as_f
 
-            @peers[peer_info.id] = peer_info
-            CogUtil::Logger.info("Connected to peer #{peer_info.name} (#{peer_info.id})")
-
-            socket.close
-            return true
+              @peers[peer_info.id] = peer_info
+              CogUtil::Logger.info("Connected to peer #{peer_info.name} (#{peer_info.id})")
+              return true
+            end
           end
-        end
 
-        socket.close
-        return false
-      rescue ex
-        CogUtil::Logger.error("Failed to connect to peer #{host}:#{port} - #{ex.message}")
-        return false
+          return false
+        rescue ex
+          last_error = ex.message
+          # Retry connection-refused / transient startup races
+          if attempt < retries - 1
+            sleep(0.05.seconds * (attempt + 1))
+            next
+          end
+        ensure
+          socket.try(&.close)
+        end
       end
+
+      CogUtil::Logger.error("Failed to connect to peer #{host}:#{port} - #{last_error}")
+      false
     end
 
     # Send a message to a specific peer
@@ -203,21 +228,26 @@ module AgentZero
     # Request collaborative reasoning from the network
     def request_collaborative_reasoning(query : String, timeout_seconds : Int32 = 30) : Array(CollaborativeResult)
       reasoning_id = UUID.random.to_s
-      request_message = Message.new("collaborative_reasoning_request", @id, {
-        "reasoning_id" => reasoning_id,
-        "query" => query,
-        "requester" => @name,
-        "timeout" => timeout_seconds,
-        "timestamp" => Time.utc.to_rfc3339
-      })
-
-      # Store expected responses
-      expected_responses = @peers.keys
       received_results = [] of CollaborativeResult
+
+      # Always contribute local reasoning so single-agent / offline networks
+      # still produce real results instead of empty placeholders.
+      local_start = Time.instant
+      local = perform_local_reasoning(query)
+      local_ms = (Time.instant - local_start).total_milliseconds
+      received_results << CollaborativeResult.new(
+        @id,
+        local.content,
+        local.confidence,
+        local_ms
+      )
+
+      # Store expected peer responses
+      expected_responses = @peers.keys
 
       # Set up response handler
       original_handler = @message_handlers["collaborative_reasoning_response"]?
-      @message_handlers["collaborative_reasoning_response"] = ->(message : Message) {
+      @message_handlers["collaborative_reasoning_response"] = ->(message : Message, _client : TCPSocket?) {
         if message.payload["reasoning_id"] == reasoning_id
           result = CollaborativeResult.new(
             message.sender_id,
@@ -227,17 +257,28 @@ module AgentZero
           )
           received_results << result
         end
-        original_handler.try(&.call(message))
+        original_handler.try(&.call(message, nil))
       }
 
-      # Broadcast request
-      broadcast_message(request_message)
+      if expected_responses.size > 0
+        request_message = Message.new("collaborative_reasoning_request", @id, {
+          "reasoning_id" => reasoning_id,
+          "query"        => query,
+          "requester"    => @name,
+          "timeout"      => timeout_seconds,
+          "timestamp"    => Time.utc.to_rfc3339,
+        })
 
-      # Wait for responses with timeout
-      start_time = Time.instant
-      while received_results.size < expected_responses.size &&
-            (Time.instant - start_time).total_seconds < timeout_seconds
-        sleep 0.1.seconds
+        # Broadcast request
+        broadcast_message(request_message)
+
+        # Wait for peer responses with timeout
+        start_time = Time.instant
+        peer_results_target = expected_responses.size
+        while (received_results.size - 1) < peer_results_target &&
+              (Time.instant - start_time).total_seconds < timeout_seconds
+          sleep 0.1.seconds
+        end
       end
 
       # Restore original handler
@@ -255,11 +296,11 @@ module AgentZero
     def share_knowledge(knowledge_item : KnowledgeItem) : Int32
       share_message = Message.new("knowledge_share", @id, {
         "knowledge_id" => knowledge_item.id,
-        "type" => knowledge_item.type,
-        "content" => knowledge_item.content,
-        "confidence" => knowledge_item.confidence,
-        "source" => @name,
-        "timestamp" => Time.utc.to_rfc3339
+        "type"         => knowledge_item.type,
+        "content"      => knowledge_item.content,
+        "confidence"   => knowledge_item.confidence,
+        "source"       => @name,
+        "timestamp"    => Time.utc.to_rfc3339,
       })
 
       broadcast_message(share_message)
@@ -270,33 +311,32 @@ module AgentZero
       peer_status = @peers.map do |id, peer|
         {
           id => JSON::Any.new({
-            "name" => JSON::Any.new(peer.name),
-            "host" => JSON::Any.new(peer.host),
-            "port" => JSON::Any.new(peer.port.to_i64),
-            "status" => JSON::Any.new(peer.status.to_s),
+            "name"         => JSON::Any.new(peer.name),
+            "host"         => JSON::Any.new(peer.host),
+            "port"         => JSON::Any.new(peer.port.to_i64),
+            "status"       => JSON::Any.new(peer.status.to_s),
             "capabilities" => JSON::Any.new(peer.capabilities.map { |c| JSON::Any.new(c) }),
-            "trust_level" => JSON::Any.new(peer.trust_level),
-            "last_seen" => JSON::Any.new(peer.last_seen.to_rfc3339),
-            "is_stale" => JSON::Any.new(peer.is_stale?)
-          })
+            "trust_level"  => JSON::Any.new(peer.trust_level),
+            "last_seen"    => JSON::Any.new(peer.last_seen.to_rfc3339),
+            "is_stale"     => JSON::Any.new(peer.is_stale?),
+          }),
         }
       end.reduce({} of String => JSON::Any) { |acc, item| acc.merge!(item) }
 
       {
-        "agent_id" => JSON::Any.new(@id),
-        "agent_name" => JSON::Any.new(@name),
-        "status" => JSON::Any.new(@status.to_s),
-        "peer_count" => JSON::Any.new(@peers.size.to_i64),
-        "peers" => JSON::Any.new(peer_status),
-        "capabilities" => JSON::Any.new(@capabilities.map { |c| JSON::Any.new(c) }),
-        "trust_level" => JSON::Any.new(@trust_level),
-        "uptime_seconds" => JSON::Any.new(uptime_seconds.to_i64)
+        "agent_id"       => JSON::Any.new(@id),
+        "agent_name"     => JSON::Any.new(@name),
+        "status"         => JSON::Any.new(@status.to_s),
+        "peer_count"     => JSON::Any.new(@peers.size.to_i64),
+        "peers"          => JSON::Any.new(peer_status),
+        "capabilities"   => JSON::Any.new(@capabilities.map { |c| JSON::Any.new(c) }),
+        "trust_level"    => JSON::Any.new(@trust_level),
+        "uptime_seconds" => JSON::Any.new(uptime_seconds.to_i64),
       }
     end
 
-    private def start_server
-      @server = TCPServer.new(@host, @port)
-
+    # Accept loop for an already-bound server socket.
+    private def accept_connections
       while @running && (server = @server)
         begin
           client = server.accept
@@ -331,7 +371,7 @@ module AgentZero
     private def process_message(message : Message, client : TCPSocket?)
       handler = @message_handlers[message.type]?
       if handler
-        handler.call(message)
+        handler.call(message, client)
       else
         CogUtil::Logger.warn("No handler for message type: #{message.type}")
       end
@@ -344,19 +384,28 @@ module AgentZero
 
     private def setup_message_handlers
       # Agent introduction handler
-      @message_handlers["agent_introduction"] = ->(message : Message) {
+      @message_handlers["agent_introduction"] = ->(message : Message, client : TCPSocket?) {
         response_payload = {
-          "status" => "accepted",
-          "agent_id" => @id,
-          "name" => @name,
-          "host" => @host,
-          "port" => @port,
+          "status"       => "accepted",
+          "agent_id"     => @id,
+          "name"         => @name,
+          "host"         => @host,
+          "port"         => @port,
           "capabilities" => @capabilities,
-          "trust_level" => @trust_level,
-          "timestamp" => Time.utc.to_rfc3339
+          "trust_level"  => @trust_level,
+          "timestamp"    => Time.utc.to_rfc3339,
         }
 
         response = Message.new("agent_introduction_response", @id, response_payload)
+
+        # Send response back to the connecting peer
+        if client
+          begin
+            client.puts(response.to_json)
+          rescue ex
+            CogUtil::Logger.error("Failed to send introduction response: #{ex.message}")
+          end
+        end
 
         # Add peer to our list
         peer_info = PeerInfo.new(
@@ -373,7 +422,7 @@ module AgentZero
       }
 
       # Collaborative reasoning request handler
-      @message_handlers["collaborative_reasoning_request"] = ->(message : Message) {
+      @message_handlers["collaborative_reasoning_request"] = ->(message : Message, _client : TCPSocket?) {
         query = message.payload["query"].as_s
         reasoning_id = message.payload["reasoning_id"].as_s
 
@@ -385,19 +434,19 @@ module AgentZero
         reasoning_time = (Time.instant - start_time).total_milliseconds
 
         response = Message.new("collaborative_reasoning_response", @id, {
-          "reasoning_id" => reasoning_id,
-          "response" => result.content,
-          "confidence" => result.confidence,
+          "reasoning_id"      => reasoning_id,
+          "response"          => result.content,
+          "confidence"        => result.confidence,
           "reasoning_time_ms" => reasoning_time,
-          "agent_name" => @name,
-          "timestamp" => Time.utc.to_rfc3339
+          "agent_name"        => @name,
+          "timestamp"         => Time.utc.to_rfc3339,
         })
 
         send_message_to_peer(message.sender_id, response)
       }
 
       # Knowledge sharing handler
-      @message_handlers["knowledge_share"] = ->(message : Message) {
+      @message_handlers["knowledge_share"] = ->(message : Message, _client : TCPSocket?) {
         knowledge_item = KnowledgeItem.new(
           message.payload["knowledge_id"].as_s,
           message.payload["type"].as_s,
@@ -413,7 +462,7 @@ module AgentZero
       }
 
       # Agent goodbye handler
-      @message_handlers["agent_goodbye"] = ->(message : Message) {
+      @message_handlers["agent_goodbye"] = ->(message : Message, _client : TCPSocket?) {
         peer_id = message.payload["agent_id"].as_s
         if peer = @peers.delete(peer_id)
           CogUtil::Logger.info("Peer #{peer.name} disconnected")
@@ -421,7 +470,7 @@ module AgentZero
       }
 
       # Discovery heartbeat handler
-      @message_handlers["discovery_heartbeat"] = ->(message : Message) {
+      @message_handlers["discovery_heartbeat"] = ->(message : Message, _client : TCPSocket?) {
         # Update or add peer information
         peer_id = message.sender_id
         if peer = @peers[peer_id]?
@@ -445,49 +494,70 @@ module AgentZero
     end
 
     private def discovery_heartbeat_loop
+      heartbeat_interval = 30.seconds
+      check_interval = 0.1.seconds
+      elapsed = Time::Span.zero
+
       while @running
-        # Send heartbeat to all known peers
-        heartbeat_message = Message.new("discovery_heartbeat", @id, {
-          "agent_id" => @id,
-          "name" => @name,
-          "host" => @host,
-          "port" => @port,
-          "status" => @status.to_s,
-          "capabilities" => @capabilities,
-          "timestamp" => Time.utc.to_rfc3339
-        })
+        # Check running status frequently, but only send heartbeat at the configured interval
+        if elapsed >= heartbeat_interval
+          # Send heartbeat to all known peers
+          heartbeat_message = Message.new("discovery_heartbeat", @id, {
+            "agent_id"     => @id,
+            "name"         => @name,
+            "host"         => @host,
+            "port"         => @port,
+            "status"       => @status.to_s,
+            "capabilities" => @capabilities,
+            "timestamp"    => Time.utc.to_rfc3339,
+          })
 
-        broadcast_message(heartbeat_message)
+          broadcast_message(heartbeat_message)
 
-        # Clean up stale peers
-        @peers.reject! do |id, peer|
-          if peer.is_stale?
-            CogUtil::Logger.debug("Removing stale peer: #{peer.name}")
-            true
-          else
-            false
+          # Clean up stale peers
+          @peers.reject! do |id, peer|
+            if peer.is_stale?
+              CogUtil::Logger.debug("Removing stale peer: #{peer.name}")
+              true
+            else
+              false
+            end
           end
+
+          elapsed = Time::Span.zero
         end
 
-        sleep 30.seconds # Send heartbeat every 30 seconds
+        sleep check_interval
+        elapsed += check_interval
       end
     end
 
     private def perform_local_reasoning(query : String) : ReasoningResult
-      # Use the cognitive kernel for local reasoning
-      # This is a simplified implementation - would integrate with PLN, ECAN, etc.
-
-      # Add query to atomspace
+      # Integrate cognitive kernel with lightweight concept extraction
       query_node = @cognitive_kernel.add_concept_node("query_#{UUID.random}")
       query_content = @cognitive_kernel.add_concept_node(query)
       @cognitive_kernel.add_evaluation_link(query_node, query_content)
 
-      # Generate cognitive tensor encoding for the query
-      tensor_encoding = @cognitive_kernel.cognitive_tensor_field_encoding("reasoning")
+      # Seed conceptual structure from query tokens
+      tokens = query.downcase.gsub(/[^a-z0-9\s]/, " ").split(/\s+/).reject(&.empty?).reject { |t| t.size < 3 }
+      concepts = tokens.map { |t| @cognitive_kernel.add_concept_node(t) }
+      if concepts.size >= 2
+        (0...concepts.size - 1).each do |i|
+          tv = AtomSpace::SimpleTruthValue.new(0.7, 0.6)
+          @cognitive_kernel.add_inheritance_link(concepts[i], concepts[i + 1], tv)
+        end
+      end
 
-      # Simple reasoning based on tensor field patterns
-      confidence = Math.min(0.9, tensor_encoding.sum / tensor_encoding.size / 10.0)
-      response_content = "Reasoning result for: #{query} (confidence: #{confidence.round(3)})"
+      # Confidence from extracted concept structure (avoid overflow-prone tensor path)
+      knowledge_bonus = Math.min(0.4, concepts.size * 0.06)
+      confidence = Math.min(0.95, 0.5 + knowledge_bonus)
+
+      related = concepts.map(&.name).first(5).join(", ")
+      response_content = String.build do |str|
+        str << "Agent #{@name} reasoning on: #{query}. "
+        str << "Concepts: [#{related}]. " unless related.empty?
+        str << "Confidence: #{confidence.round(3)}"
+      end
 
       ReasoningResult.new(response_content, confidence)
     end
@@ -508,12 +578,19 @@ module AgentZero
       CogUtil::Logger.debug("Integrated shared knowledge: #{knowledge.type} - #{knowledge.content}")
     end
 
+    # Ports handed out to nodes in this process. A probed port is only bound
+    # later in #start, so without this two nodes created back to back would
+    # both pick the same free port.
+    @@assigned_ports = Set(Int32).new
+
     private def find_available_port : Int32
       # Find an available port starting from 20000
       (20000..21000).each do |port|
+        next if @@assigned_ports.includes?(port)
         begin
           server = TCPServer.new(@host, port)
           server.close
+          @@assigned_ports << port
           return port
         rescue
           # Port is in use, try next one
@@ -561,7 +638,7 @@ module AgentZero
         when Bool
           JSON::Any.new(value)
         else
-          JSON::Any.new(value.to_s)
+          raise "Unexpected type in Message payload"
         end
       end
     end

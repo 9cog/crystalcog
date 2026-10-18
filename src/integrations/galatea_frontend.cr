@@ -27,11 +27,11 @@ module GalateaFrontend
     property cors_enabled : Bool
     property max_connections : Int32
     property external_api_url : String
-    property auth_provider : String  # firebase, supabase, or internal
+    property auth_provider : String # firebase, supabase, or internal
     property auth_token : String?
     property aphrodite_endpoint : String?
-    property cognitive_agency_mode : Symbol  # :passive, :active, :autonomous
-    property grip_strength : Int32  # 1-10 cognitive grip intensity
+    property cognitive_agency_mode : Symbol # :passive, :active, :autonomous
+    property grip_strength : Int32          # 1-10 cognitive grip intensity
     property stream_cognitive_state : Bool
     property react_bridge_enabled : Bool
 
@@ -55,10 +55,10 @@ module GalateaFrontend
     # Get optimal grip configuration for cognitive agency
     def optimal_grip_config : Hash(String, String)
       {
-        "mode" => @cognitive_agency_mode.to_s,
-        "strength" => @grip_strength.to_s,
-        "streaming" => @stream_cognitive_state.to_s,
-        "react_bridge" => @react_bridge_enabled.to_s
+        "mode"         => @cognitive_agency_mode.to_s,
+        "strength"     => @grip_strength.to_s,
+        "streaming"    => @stream_cognitive_state.to_s,
+        "react_bridge" => @react_bridge_enabled.to_s,
       }
     end
   end
@@ -75,11 +75,11 @@ module GalateaFrontend
     def initialize(@grip_strength = 7, @mode = :active)
       @active_thoughts = [] of Hash(String, String)
       @agency_state = {
-        "awareness" => 0.8,
+        "awareness"      => 0.8,
         "intentionality" => 0.7,
-        "coherence" => 0.9,
-        "autonomy" => 0.6,
-        "grip_factor" => (@grip_strength / 10.0)
+        "coherence"      => 0.9,
+        "autonomy"       => 0.6,
+        "grip_factor"    => (@grip_strength / 10.0),
       }
       @attention_weights = {} of String => Float64
       @atomspace = nil
@@ -90,10 +90,10 @@ module GalateaFrontend
       CogUtil::Logger.debug("Applying cognitive grip (strength: #{@grip_strength})")
 
       grip_response = {
-        "input_processed" => cognitive_input,
-        "grip_applied" => "true",
-        "strength" => @grip_strength.to_s,
-        "coherence_maintained" => (@agency_state["coherence"] > 0.5).to_s
+        "input_processed"      => cognitive_input,
+        "grip_applied"         => "true",
+        "strength"             => @grip_strength.to_s,
+        "coherence_maintained" => (@agency_state["coherence"] > 0.5).to_s,
       }
 
       # Update attention weights based on input
@@ -108,10 +108,10 @@ module GalateaFrontend
     # Register a thought in the cognitive stream
     def register_thought(content : String, thought_type : String)
       thought = {
-        "content" => content,
-        "type" => thought_type,
-        "timestamp" => Time.utc.to_s,
-        "grip_state" => @grip_strength.to_s
+        "content"    => content,
+        "type"       => thought_type,
+        "timestamp"  => Time.utc.to_s,
+        "grip_state" => @grip_strength.to_s,
       }
       @active_thoughts << thought
 
@@ -148,14 +148,14 @@ module GalateaFrontend
     # Get current agency state for frontend sync
     def get_agency_state : Hash(String, String)
       {
-        "grip_strength" => @grip_strength.to_s,
-        "mode" => @mode.to_s,
+        "grip_strength"         => @grip_strength.to_s,
+        "mode"                  => @mode.to_s,
         "active_thoughts_count" => @active_thoughts.size.to_s,
-        "awareness" => @agency_state["awareness"].to_s,
-        "intentionality" => @agency_state["intentionality"].to_s,
-        "coherence" => @agency_state["coherence"].to_s,
-        "autonomy" => @agency_state["autonomy"].to_s,
-        "attention_focus_count" => @attention_weights.size.to_s
+        "awareness"             => @agency_state["awareness"].to_s,
+        "intentionality"        => @agency_state["intentionality"].to_s,
+        "coherence"             => @agency_state["coherence"].to_s,
+        "autonomy"              => @agency_state["autonomy"].to_s,
+        "attention_focus_count" => @attention_weights.size.to_s,
       }
     end
 
@@ -178,11 +178,11 @@ module GalateaFrontend
     # Reset agency state to defaults
     def reset_agency
       @agency_state = {
-        "awareness" => 0.8,
+        "awareness"      => 0.8,
         "intentionality" => 0.7,
-        "coherence" => 0.9,
-        "autonomy" => 0.6,
-        "grip_factor" => (@grip_strength / 10.0)
+        "coherence"      => 0.9,
+        "autonomy"       => 0.6,
+        "grip_factor"    => (@grip_strength / 10.0),
       }
       @active_thoughts.clear
       @attention_weights.clear
@@ -231,9 +231,9 @@ module GalateaFrontend
       return false unless @connected
 
       update = state.merge({
-        "session_id" => @session_id || "",
-        "timestamp" => Time.utc.to_s,
-        "update_type" => "cognitive_state"
+        "session_id"  => @session_id || "",
+        "timestamp"   => Time.utc.to_s,
+        "update_type" => "cognitive_state",
       })
 
       @pending_updates << update
@@ -261,10 +261,10 @@ module GalateaFrontend
       CogUtil::Logger.debug("Sending action to React frontend: #{action_type}")
 
       {
-        "action" => action_type,
-        "status" => "dispatched",
-        "session_id" => @session_id || "",
-        "payload_size" => payload.size.to_s
+        "action"       => action_type,
+        "status"       => "dispatched",
+        "session_id"   => @session_id || "",
+        "payload_size" => payload.size.to_s,
       }
     end
 
@@ -279,10 +279,10 @@ module GalateaFrontend
     # Get bridge status
     def status : Hash(String, String)
       {
-        "connected" => @connected.to_s,
-        "session_id" => @session_id || "none",
+        "connected"       => @connected.to_s,
+        "session_id"      => @session_id || "none",
         "pending_updates" => @pending_updates.size.to_s,
-        "api_base_url" => @api_base_url
+        "api_base_url"    => @api_base_url,
       }
     end
   end
@@ -299,11 +299,11 @@ module GalateaFrontend
     # Health check endpoint - /api/health
     def handle_health_check : Hash(String, String)
       {
-        "status" => "healthy",
-        "service" => "galatea-crystalcog-frontend",
-        "version" => VERSION,
-        "external_repo" => EXTERNAL_REPO,
-        "cognitive_agency" => "active"
+        "status"           => "healthy",
+        "service"          => "galatea-crystalcog-frontend",
+        "version"          => VERSION,
+        "external_repo"    => EXTERNAL_REPO,
+        "cognitive_agency" => "active",
       }
     end
 
@@ -312,9 +312,9 @@ module GalateaFrontend
       CogUtil::Logger.debug("Handling get_state request")
 
       base_state = {
-        "state" => "active",
+        "state"              => "active",
         "atomspace_attached" => (!@atomspace.nil?).to_s,
-        "timestamp" => Time.utc.to_s
+        "timestamp"          => Time.utc.to_s,
       }
 
       # Merge with agency state
@@ -342,9 +342,9 @@ module GalateaFrontend
       # Query processing with cognitive context
       if query.has_key?("type")
         results << {
-          "query_type" => query["type"],
-          "status" => "processed",
-          "grip_applied" => "true"
+          "query_type"   => query["type"],
+          "status"       => "processed",
+          "grip_applied" => "true",
         }
       end
 
@@ -360,10 +360,10 @@ module GalateaFrontend
       @cognitive_agency.register_thought(action.to_json, "action_execution")
 
       {
-        "status" => "executed",
+        "status"      => "executed",
         "action_type" => action_type,
-        "result" => "Action completed with cognitive grip",
-        "grip_state" => @cognitive_agency.grip_strength.to_s
+        "result"      => "Action completed with cognitive grip",
+        "grip_state"  => @cognitive_agency.grip_strength.to_s,
       }
     end
 
@@ -376,28 +376,28 @@ module GalateaFrontend
 
       # Add cognitive agency nodes
       nodes << {
-        "id" => "agency_core",
-        "type" => "cognitive_agency",
+        "id"    => "agency_core",
+        "type"  => "cognitive_agency",
         "label" => "Cognitive Agency Controller",
-        "grip" => @cognitive_agency.grip_strength.to_s
+        "grip"  => @cognitive_agency.grip_strength.to_s,
       }
 
       nodes << {
-        "id" => "attention",
-        "type" => "attention_layer",
-        "label" => "Attention Weights",
-        "focus_count" => @cognitive_agency.attention_weights.size.to_s
+        "id"          => "attention",
+        "type"        => "attention_layer",
+        "label"       => "Attention Weights",
+        "focus_count" => @cognitive_agency.attention_weights.size.to_s,
       }
 
       edges << {
         "source" => "agency_core",
         "target" => "attention",
-        "type" => "cognitive_flow"
+        "type"   => "cognitive_flow",
       }
 
       {
         "nodes" => nodes,
-        "edges" => edges
+        "edges" => edges,
       }
     end
 
@@ -435,9 +435,9 @@ module GalateaFrontend
     def handle_connect(client_id : String)
       @active_connections += 1
       @connection_registry[client_id] = {
-        "connected_at" => Time.utc.to_s,
+        "connected_at"  => Time.utc.to_s,
         "last_activity" => Time.utc.to_s,
-        "subscriptions" => "cognitive_state,thoughts"
+        "subscriptions" => "cognitive_state,thoughts",
       }
       CogUtil::Logger.info("WebSocket client connected: #{client_id} (total: #{@active_connections})")
     end
@@ -460,16 +460,16 @@ module GalateaFrontend
 
       # Apply cognitive grip to incoming message
       grip_result = if agency = @cognitive_agency
-        agency.apply_grip(message)
-      else
-        {"grip_applied" => "false"}
-      end
+                      agency.apply_grip(message)
+                    else
+                      {"grip_applied" => "false"}
+                    end
 
       response = {
-        "type" => "ack",
-        "client_id" => client_id,
+        "type"         => "ack",
+        "client_id"    => client_id,
         "grip_applied" => grip_result["grip_applied"]? || "false",
-        "message" => "Message processed with cognitive grip"
+        "message"      => "Message processed with cognitive grip",
       }
 
       response.to_json
@@ -501,10 +501,10 @@ module GalateaFrontend
       end
 
       update = {
-        "type" => "atom_update",
+        "type"        => "atom_update",
         "atom_handle" => atom_handle.to_s,
         "update_type" => update_type,
-        "timestamp" => Time.utc.to_s
+        "timestamp"   => Time.utc.to_s,
       }
 
       broadcast_state_update(update)
@@ -518,9 +518,9 @@ module GalateaFrontend
         recent_thoughts = agency.active_thoughts.last(5)
 
         thought_update = {
-          "type" => "thought_stream",
-          "count" => recent_thoughts.size.to_s,
-          "timestamp" => Time.utc.to_s
+          "type"      => "thought_stream",
+          "count"     => recent_thoughts.size.to_s,
+          "timestamp" => Time.utc.to_s,
         }
 
         broadcast_state_update(thought_update)
@@ -603,15 +603,15 @@ module GalateaFrontend
     # Get comprehensive frontend status
     def status : Hash(String, String)
       base_status = {
-        "interface_status" => @running ? "running" : "stopped",
-        "host" => @config.host,
-        "port" => @config.port.to_s,
-        "websocket_port" => @config.websocket_port.to_s,
-        "active_connections" => @ws_handlers.active_connections.to_s,
-        "cors_enabled" => @config.cors_enabled.to_s,
-        "external_repo" => EXTERNAL_REPO,
+        "interface_status"      => @running ? "running" : "stopped",
+        "host"                  => @config.host,
+        "port"                  => @config.port.to_s,
+        "websocket_port"        => @config.websocket_port.to_s,
+        "active_connections"    => @ws_handlers.active_connections.to_s,
+        "cors_enabled"          => @config.cors_enabled.to_s,
+        "external_repo"         => EXTERNAL_REPO,
         "cognitive_agency_mode" => @config.cognitive_agency_mode.to_s,
-        "grip_strength" => @config.grip_strength.to_s
+        "grip_strength"         => @config.grip_strength.to_s,
       }
 
       # Add React bridge status
@@ -634,9 +634,9 @@ module GalateaFrontend
 
       {
         "pipeline_status" => "completed",
-        "grip_applied" => grip_result["grip_applied"]? || "false",
-        "react_pushed" => @react_bridge.connected.to_s,
-        "broadcast_sent" => "true"
+        "grip_applied"    => grip_result["grip_applied"]? || "false",
+        "react_pushed"    => @react_bridge.connected.to_s,
+        "broadcast_sent"  => "true",
       }
     end
   end

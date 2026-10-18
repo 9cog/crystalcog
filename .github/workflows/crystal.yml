@@ -6,12 +6,24 @@ on:
   pull_request:
     branches: [ "main" ]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+# Least-privilege token by default; jobs that write declare their own permissions.
+permissions:
+  contents: read
+
+# Trace every command so CI logs show exactly what ran and what it printed.
+defaults:
+  run:
+    shell: bash -ex {0}
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
     container:
-      image: crystallang/crystal
+      image: crystallang/crystal:1.14.0
       options: --memory=4g --cpus=2
 
     steps:
@@ -20,17 +32,19 @@ jobs:
     - name: Install system dependencies
       run: |
         apt-get update
-        apt-get install -y libsqlite3-dev librocksdb-dev libevent-dev libssl-dev || true
+        apt-get install -y libsqlite3-dev libpq-dev librocksdb-dev libevent-dev libssl-dev
     
     - name: Install dependencies
-      run: shards install
+      run: shards install --verbose --frozen
     
     - name: Run tests with error handling
+      shell: bash --noprofile --norc -x -eo pipefail {0}
       run: |
+        set -o pipefail
         echo "Running Crystal specs..."
         
         # Try normal execution first
-        if crystal spec --error-trace --no-color 2>&1 | tee test_output.log; then
+        if crystal spec --stats -v --error-trace --no-color 2>&1 | tee test_output.log; then
           echo "✓ Tests passed"
           exit 0
         fi
@@ -38,7 +52,7 @@ jobs:
         # Check if it was a compiler crash
         if grep -q "BUG: a codegen process failed" test_output.log || grep -q "Invalid memory access" test_output.log; then
           echo "⚠️  Compiler crash detected, retrying with single-threaded execution..."
-          CRYSTAL_WORKERS=1 crystal spec --error-trace --no-color
+          CRYSTAL_WORKERS=1 crystal spec --stats -v --error-trace --no-color
         else
           echo "✗ Tests failed"
           cat test_output.log

@@ -27,19 +27,19 @@ module AtomSpace
     STORAGE_NODE            = 110
 
     # NLP-specific node types
-    WORD_NODE               = 111
-    WORD_CLASS_NODE         = 112
-    DOCUMENT_NODE           = 113
-    SENTENCE_NODE           = 114
-    PHRASE_NODE             = 115
-    PARSE_NODE              = 116
-    WORD_INSTANCE_NODE      = 117
-    LG_DICT_NODE            = 118
-    LG_CONN_NODE            = 119
-    LG_CONN_MULTI_NODE      = 120
-    LG_CONN_DIR_NODE        = 121
-    LG_LINK_NODE            = 122
-    LG_LINK_INSTANCE_NODE   = 123
+    WORD_NODE             = 111
+    WORD_CLASS_NODE       = 112
+    DOCUMENT_NODE         = 113
+    SENTENCE_NODE         = 114
+    PHRASE_NODE           = 115
+    PARSE_NODE            = 116
+    WORD_INSTANCE_NODE    = 117
+    LG_DICT_NODE          = 118
+    LG_CONN_NODE          = 119
+    LG_CONN_MULTI_NODE    = 120
+    LG_CONN_DIR_NODE      = 121
+    LG_LINK_NODE          = 122
+    LG_LINK_INSTANCE_NODE = 123
 
     # Link types
     LIST_LINK        = 201
@@ -56,25 +56,25 @@ module AtomSpace
     EXECUTION_LINK   = 212
 
     # NLP-specific link types
-    ORDERED_LINK            = 213
-    REFERENCE_LINK          = 214
-    SENTENCE_LINK           = 215
-    PARSE_LINK              = 216
-    WORD_INSTANCE_LINK      = 217
-    SEQUENCE_LINK           = 218
-    WORD_SEQUENCE_LINK      = 219
-    SENTENCE_SEQUENCE_LINK  = 220
-    DOCUMENT_SEQUENCE_LINK  = 221
-    LG_CONNECTOR            = 222
-    LG_SEQ                  = 223
-    LG_AND                  = 224
-    LG_OR                   = 225
-    LG_WORD_CSET            = 226
-    LG_DISJUNCT             = 227
-    LG_LINK_INSTANCE_LINK   = 228
-    LG_PARSE_LINK           = 229
-    LG_PARSE_MINIMAL        = 230
-    LG_PARSE_DISJUNCTS      = 231
+    ORDERED_LINK           = 213
+    REFERENCE_LINK         = 214
+    SENTENCE_LINK          = 215
+    PARSE_LINK             = 216
+    WORD_INSTANCE_LINK     = 217
+    SEQUENCE_LINK          = 218
+    WORD_SEQUENCE_LINK     = 219
+    SENTENCE_SEQUENCE_LINK = 220
+    DOCUMENT_SEQUENCE_LINK = 221
+    LG_CONNECTOR           = 222
+    LG_SEQ                 = 223
+    LG_AND                 = 224
+    LG_OR                  = 225
+    LG_WORD_CSET           = 226
+    LG_DISJUNCT            = 227
+    LG_LINK_INSTANCE_LINK  = 228
+    LG_PARSE_LINK          = 229
+    LG_PARSE_MINIMAL       = 230
+    LG_PARSE_DISJUNCTS     = 231
 
     def node? : Bool
       value >= 100 && value < 200
@@ -226,13 +226,19 @@ module AtomSpace
 
   # Link class - atoms that connect other atoms
   class Link < Atom
-    getter outgoing : Array(Atom)
+    @outgoing : Array(Atom)
 
-    def initialize(type : AtomType, @outgoing : Array(Atom), truth_value : TruthValue = TruthValue::DEFAULT_TV)
+    def initialize(type : AtomType, outgoing : Array(Atom), truth_value : TruthValue = TruthValue::DEFAULT_TV)
       unless type.link?
         raise ArgumentError.new("Link type expected, got #{type}")
       end
+      @outgoing = outgoing.dup
       super(type, truth_value)
+    end
+
+    # Link topology is fixed after construction; return a detached view.
+    def outgoing : Array(Atom)
+      @outgoing.dup
     end
 
     def name : String
@@ -240,17 +246,17 @@ module AtomSpace
     end
 
     def arity : Int32
-      outgoing.size
+      @outgoing.size
     end
 
     def clone : Atom
-      cloned_outgoing = outgoing.map(&.clone)
+      cloned_outgoing = @outgoing.map(&.clone)
       Link.new(type, cloned_outgoing, truth_value.clone)
     end
 
     def to_s(io : IO) : Nil
       io << "(#{type}"
-      outgoing.each do |atom|
+      @outgoing.each do |atom|
         io << " "
         atom.to_s(io)
       end
@@ -259,9 +265,9 @@ module AtomSpace
 
     def content_equals?(other : Atom) : Bool
       return false unless other.is_a?(Link)
-      return false unless outgoing.size == other.outgoing.size
+      return false unless arity == other.arity
 
-      outgoing.zip(other.outgoing) do |a, b|
+      @outgoing.zip(other.outgoing) do |a, b|
         return false unless a == b
       end
       true
@@ -269,17 +275,17 @@ module AtomSpace
 
     # Get atom at specific position
     def [](index : Int32) : Atom
-      outgoing[index]
+      @outgoing[index]
     end
 
     # Get first atom (common in binary links)
     def first : Atom
-      outgoing[0]
+      @outgoing[0]
     end
 
     # Get last atom
     def last : Atom
-      outgoing[-1]
+      @outgoing[-1]
     end
   end
 
@@ -312,6 +318,13 @@ module AtomSpace
     def initialize(value : Int32, truth_value : TruthValue = TruthValue::DEFAULT_TV)
       @value = value.to_f64
       super(AtomType::NUMBER_NODE, value.to_s, truth_value)
+    end
+
+    # Persistence must preserve the exact label: NumberNode(42) is named "42",
+    # while NumberNode(42.0) is named "42.0", despite equal numeric values.
+    def initialize(name : String, truth_value : TruthValue = TruthValue::DEFAULT_TV)
+      @value = name.to_f64
+      super(AtomType::NUMBER_NODE, name, truth_value)
     end
   end
 
@@ -401,12 +414,13 @@ module AtomSpace
     @loaded : Bool = false
     @mutex : Mutex
 
-    def initialize(type : AtomType, @outgoing_handles : Array(Handle),
+    def initialize(type : AtomType, outgoing_handles : Array(Handle),
                    truth_value : TruthValue = TruthValue::DEFAULT_TV,
                    @resolver : AtomResolver? = nil)
       unless type.link?
         raise ArgumentError.new("Link type expected, got #{type}")
       end
+      @outgoing_handles = outgoing_handles.dup
       super(type, truth_value)
       @mutex = Mutex.new
     end
@@ -418,7 +432,7 @@ module AtomSpace
 
     # Get handles without loading atoms (for serialization)
     def outgoing_handles : Array(Handle)
-      @outgoing_handles
+      @outgoing_handles.dup
     end
 
     # Check if outgoing atoms have been loaded
@@ -442,7 +456,7 @@ module AtomSpace
           load_outgoing_atoms unless @loaded
         end
       end
-      @outgoing_cache || [] of Atom
+      @outgoing_cache.try(&.dup) || [] of Atom
     end
 
     def name : String

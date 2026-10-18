@@ -138,6 +138,14 @@ module Temporal
       @milliseconds > other.milliseconds
     end
 
+    def <=(other : Duration) : Bool
+      @milliseconds <= other.milliseconds
+    end
+
+    def >=(other : Duration) : Bool
+      @milliseconds >= other.milliseconds
+    end
+
     def ==(other : Duration) : Bool
       @milliseconds == other.milliseconds
     end

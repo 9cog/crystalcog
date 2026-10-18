@@ -64,6 +64,14 @@ describe Temporal do
       result.to_seconds.should eq(3.0)
     end
 
+    it "compares durations inclusively" do
+      one_second = Temporal::Duration.seconds(1.0)
+      two_seconds = Temporal::Duration.seconds(2.0)
+
+      (one_second <= one_second).should be_true
+      (two_seconds >= one_second).should be_true
+    end
+
     it "multiplies duration by scalar" do
       d = Temporal::Duration.seconds(2.0)
       result = d * 3.0

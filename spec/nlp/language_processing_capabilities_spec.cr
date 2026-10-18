@@ -20,10 +20,10 @@ describe "Language Processing Capabilities" do
   describe "Natural Language Understanding and Reasoning" do
     it "processes sentences and reasons about semantic relationships" do
       atomspace = AtomSpace::AtomSpace.new
-      
+
       # Create linguistic knowledge base
       NLP.create_linguistic_kb(atomspace)
-      
+
       # Process natural language sentences about animals
       sentences = [
         "Dogs are animals.",
@@ -85,7 +85,7 @@ describe "Language Processing Capabilities" do
 
     it "understands and reasons about spatial relationships" do
       atomspace = AtomSpace::AtomSpace.new
-      
+
       # Process sentences about spatial relationships
       spatial_sentences = [
         "The cat is on the mat.",
@@ -142,7 +142,8 @@ describe "Language Processing Capabilities" do
       # Run forward chaining to derive spatial relationships
       new_atoms = ure_engine.forward_chain(5)
 
-      atomspace.size.should be >= initial_size
+      atomspace.size.should be > initial_size
+      new_atoms.size.should be > 0
 
       puts "Spatial reasoning: processed #{spatial_sentences.size} spatial sentences"
       puts "Generated #{new_atoms.size} spatial inferences"
@@ -159,7 +160,7 @@ describe "Language Processing Capabilities" do
 
     it "processes comparative language and reasons about properties" do
       atomspace = AtomSpace::AtomSpace.new
-      
+
       # Process comparative sentences
       comparative_sentences = [
         "Lions are bigger than cats.",
@@ -211,15 +212,16 @@ describe "Language Processing Capabilities" do
         tv
       )
 
-      # Create PLN engine for comparative reasoning
-      pln_engine = PLN.create_engine(atomspace)
+      # URE EvaluationTransitivity derives elephant > cat from chained bigger_than facts
+      ure_engine = URE.create_engine(atomspace)
 
       initial_size = atomspace.size
 
       # Run reasoning to derive transitive comparisons
-      new_atoms = pln_engine.reason(8)
+      new_atoms = ure_engine.forward_chain(5)
 
-      atomspace.size.should be >= initial_size
+      atomspace.size.should be > initial_size
+      new_atoms.size.should be > 0
 
       puts "Comparative reasoning: processed #{comparative_sentences.size} comparative sentences"
       puts "Generated #{new_atoms.size} comparative inferences"
@@ -241,7 +243,7 @@ describe "Language Processing Capabilities" do
 
     it "processes temporal language and reasons about time sequences" do
       atomspace = AtomSpace::AtomSpace.new
-      
+
       # Process temporal sentences
       temporal_sentences = [
         "John woke up in the morning.",
@@ -304,7 +306,8 @@ describe "Language Processing Capabilities" do
       # Run reasoning to derive temporal sequences
       new_atoms = ure_engine.forward_chain(5)
 
-      atomspace.size.should be >= initial_size
+      atomspace.size.should be > initial_size
+      new_atoms.size.should be > 0
 
       puts "Temporal reasoning: processed #{temporal_sentences.size} temporal sentences"
       puts "Generated #{new_atoms.size} temporal inferences"
@@ -321,7 +324,7 @@ describe "Language Processing Capabilities" do
 
     it "integrates keyword extraction with semantic reasoning" do
       atomspace = AtomSpace::AtomSpace.new
-      
+
       # Process a complex text and extract keywords
       complex_text = "The research shows that artificial intelligence systems can learn to recognize patterns in natural language. Machine learning algorithms analyze linguistic data to identify semantic relationships between words and concepts."
 
@@ -379,7 +382,7 @@ describe "Language Processing Capabilities" do
   describe "Advanced Language Processing Integration" do
     it "demonstrates complete language understanding pipeline" do
       atomspace = AtomSpace::AtomSpace.new
-      
+
       # Complete pipeline: Text -> Tokenization -> Semantic Analysis -> Reasoning -> Conclusions
 
       story_text = "Alice is a student. Students study hard. Hard workers succeed. Alice studies mathematics."
@@ -471,7 +474,7 @@ describe "Language Processing Capabilities" do
 
     it "demonstrates linguistic complexity analysis with reasoning" do
       atomspace = AtomSpace::AtomSpace.new
-      
+
       # Analyze linguistic complexity and reason about it
 
       simple_text = "The cat sits."
@@ -485,50 +488,51 @@ describe "Language Processing Capabilities" do
       simple_stats = NLP::TextProcessor.get_text_stats(simple_text)
       complex_stats = NLP::TextProcessor.get_text_stats(complex_text)
 
-      # Create complexity concepts
+      # Create complexity concepts and hierarchy for PLN
       simple_concept = atomspace.add_concept_node("simple_language")
       complex_concept = atomspace.add_concept_node("complex_language")
+      language = atomspace.add_concept_node("language")
+      high_complexity = atomspace.add_concept_node("high_complexity")
+      low_complexity = atomspace.add_concept_node("low_complexity")
+
+      tv = AtomSpace::SimpleTruthValue.new(0.9, 0.9)
+      atomspace.add_inheritance_link(simple_concept, language, tv)
+      atomspace.add_inheritance_link(complex_concept, language, tv)
+      atomspace.add_inheritance_link(simple_concept, low_complexity, tv)
+      atomspace.add_inheritance_link(complex_concept, high_complexity, tv)
+      atomspace.add_inheritance_link(low_complexity, language, tv)
+      atomspace.add_inheritance_link(high_complexity, language, tv)
 
       # Linguistic features
       word_count_feature = atomspace.add_predicate_node("word_count")
-      avg_word_length = atomspace.add_predicate_node("avg_word_length")
-
-      tv_simple = AtomSpace::SimpleTruthValue.new(0.9, 0.9)
-      tv_complex = AtomSpace::SimpleTruthValue.new(0.9, 0.9)
-
-      # Create facts about text complexity
       simple_wc = AtomSpace::NumberNode.new(simple_stats["word_count"].to_f64)
       complex_wc = AtomSpace::NumberNode.new(complex_stats["word_count"].to_f64)
-
       atomspace.add_atom(simple_wc)
       atomspace.add_atom(complex_wc)
 
       atomspace.add_evaluation_link(
         word_count_feature,
         atomspace.add_list_link([simple_concept, simple_wc]),
-        tv_simple
+        tv
       )
-
       atomspace.add_evaluation_link(
         word_count_feature,
         atomspace.add_list_link([complex_concept, complex_wc]),
-        tv_complex
+        tv
       )
 
-      # Reasoning about linguistic complexity
-      complexity_rule = atomspace.add_concept_node("complexity_analysis_rule")
-
-      # Run reasoning
+      # Run reasoning over the complexity hierarchy
       pln_engine = PLN.create_engine(atomspace)
       complexity_atoms = pln_engine.reason(5)
 
       puts "Linguistic complexity analysis:"
-      puts "  Simple text: #{simple_stats["word_count"]} words, #{simple_stats["avg_word_length"]} avg length"
-      puts "  Complex text: #{complex_stats["word_count"]} words, #{complex_stats["avg_word_length"]} avg length"
+      puts "  Simple text: #{simple_stats["word_count"]} words, #{simple_stats["average_word_length"]} avg length"
+      puts "  Complex text: #{complex_stats["word_count"]} words, #{complex_stats["average_word_length"]} avg length"
       puts "  Generated #{complexity_atoms.size} complexity inferences"
 
-      # Should understand that more words generally means more complexity
-      complexity_atoms.size.should be >= 0
+      simple_stats["word_count"].should be < complex_stats["word_count"]
+      complex_atoms.size.should be > simple_atoms.size
+      complexity_atoms.size.should be > 0
     end
   end
 end

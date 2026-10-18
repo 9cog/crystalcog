@@ -729,8 +729,8 @@ module CrystalCog
           "paths" => {
             "/atoms" => {
               "get" => {
-                "summary"     => "List all atoms",
-                "parameters"  => [
+                "summary"    => "List all atoms",
+                "parameters" => [
                   {"name" => "type", "in" => "query", "schema" => {"type" => "string"}},
                   {"name" => "limit", "in" => "query", "schema" => {"type" => "integer", "default" => 100}},
                   {"name" => "offset", "in" => "query", "schema" => {"type" => "integer", "default" => 0}},
@@ -1356,23 +1356,23 @@ module CrystalCog
 
       def generate_package_json : String
         {
-          "name"           => "@crystalcog/sdk",
-          "version"        => "0.1.0",
-          "description"    => "TypeScript SDK for CrystalCog AtomSpace",
-          "main"           => "dist/index.js",
-          "module"         => "dist/index.mjs",
-          "types"          => "dist/types.d.ts",
-          "files"          => ["dist"],
-          "scripts"        => {
-            "build"   => "tsup src/index.ts --format cjs,esm --dts",
-            "test"    => "vitest",
-            "lint"    => "eslint src",
+          "name"        => "@crystalcog/sdk",
+          "version"     => "0.1.0",
+          "description" => "TypeScript SDK for CrystalCog AtomSpace",
+          "main"        => "dist/index.js",
+          "module"      => "dist/index.mjs",
+          "types"       => "dist/types.d.ts",
+          "files"       => ["dist"],
+          "scripts"     => {
+            "build"      => "tsup src/index.ts --format cjs,esm --dts",
+            "test"       => "vitest",
+            "lint"       => "eslint src",
             "prepublish" => "npm run build",
           },
-          "keywords"       => ["crystalcog", "atomspace", "ai", "knowledge-graph", "opencog"],
-          "author"         => "CrystalCog Community",
-          "license"        => "AGPL-3.0",
-          "repository"     => {
+          "keywords"   => ["crystalcog", "atomspace", "ai", "knowledge-graph", "opencog"],
+          "author"     => "CrystalCog Community",
+          "license"    => "AGPL-3.0",
+          "repository" => {
             "type" => "git",
             "url"  => "https://github.com/cogpy/crystalcog",
           },
@@ -1381,7 +1381,7 @@ module CrystalCog
             "typescript" => "^5.0.0",
             "vitest"     => "^1.0.0",
           },
-          "peerDependencies" => {},
+          "peerDependencies" => {} of String => String,
         }.to_json
       end
     end
@@ -1434,18 +1434,18 @@ module CrystalCog
       # Status reporting (Phase 5 pattern)
       def status : Hash(String, String)
         {
-          "integration"            => "typescript_sdk",
-          "version"                => VERSION,
-          "status"                 => @initialized ? "running" : "stopped",
-          "atomspace_attached"     => (!@atomspace.nil?).to_s,
-          "host"                   => @config.host,
-          "port"                   => @config.port.to_s,
-          "api_prefix"             => @config.api_prefix,
-          "websocket_enabled"      => @config.enable_websocket.to_s,
-          "auth_enabled"           => @config.auth_enabled.to_s,
-          "cors_origins"           => @config.cors_origins.join(","),
-          "requests_handled"       => @requests_handled.to_s,
-          "websocket_connections"  => @websocket_connections.to_s,
+          "integration"           => "typescript_sdk",
+          "version"               => VERSION,
+          "status"                => @initialized ? "running" : "stopped",
+          "atomspace_attached"    => (!@atomspace.nil?).to_s,
+          "host"                  => @config.host,
+          "port"                  => @config.port.to_s,
+          "api_prefix"            => @config.api_prefix,
+          "websocket_enabled"     => @config.enable_websocket.to_s,
+          "auth_enabled"          => @config.auth_enabled.to_s,
+          "cors_origins"          => @config.cors_origins.join(","),
+          "requests_handled"      => @requests_handled.to_s,
+          "websocket_connections" => @websocket_connections.to_s,
         }
       end
 

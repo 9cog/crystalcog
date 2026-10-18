@@ -10,16 +10,23 @@ module Moses
   VERY_WORST_SCORE = Float64::MIN
   EPSILON_SCORE    = Float64::EPSILON
 
-  # Helper method to get score or worst score
+  # Helper method to get score or worst score.
+  # NaN scores (e.g. from Inf - Inf in penalized_score) are normalized to
+  # VERY_WORST_SCORE so that downstream sort/max operations remain transitive
+  # and treat incomparable candidates consistently as worst.
   def self.score_or_worst(candidate : Candidate) : Score
-    candidate.score.try(&.penalized_score) || VERY_WORST_SCORE
+    score = candidate.score.try(&.penalized_score) || VERY_WORST_SCORE
+    score.nan? ? VERY_WORST_SCORE : score
   end
 
-  # Helper method to safely compare candidates by score
+  # Helper method to safely compare candidates by score.
+  # Relies on score_or_worst to normalize NaN; the `|| 0` guards the nilable
+  # return type of Float64#<=> (which is Int32?).
   def self.compare_candidates(a : Candidate, b : Candidate) : Int32
     score_a = score_or_worst(a)
     score_b = score_or_worst(b)
-    score_a <=> score_b
+    (score_a <=> score_b) || 0
+    (score_or_worst(a) <=> score_or_worst(b)) || 0
   end
 
   # Complexity type for measuring program complexity
@@ -405,7 +412,7 @@ module Moses
 
   # Program candidate representation
   # Now uses structured Program representation while maintaining compatibility
-  struct Candidate
+  class Candidate
     property program : String          # String representation for compatibility
     property parsed_program : Program? # Structured representation
     property score : CompositeScore?
@@ -417,8 +424,9 @@ module Moses
       @parsed_program = nil
     end
 
-    def initialize(@parsed_program : Program, @generation : Int32 = 0, @evaluations : Int32 = 0)
-      @program = @parsed_program.expression
+    def initialize(parsed_program : Program, @generation : Int32 = 0, @evaluations : Int32 = 0)
+      @parsed_program = parsed_program
+      @program = parsed_program.expression
       @score = nil
     end
 

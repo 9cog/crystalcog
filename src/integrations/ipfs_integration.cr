@@ -1065,22 +1065,22 @@ module CrystalCog
         node_info = @client.node_info
 
         {
-          "integration"          => "ipfs",
-          "version"              => VERSION,
-          "status"               => @initialized ? "ready" : "not_initialized",
-          "connected"            => @client.connected?.to_s,
-          "atomspace_attached"   => (!@atomspace.nil?).to_s,
-          "host"                 => @config.api_host,
-          "port"                 => @config.api_port.to_s,
-          "node_id"              => node_info.try(&.id) || "unknown",
-          "ipfs_version"         => @client.version,
-          "repo_size"            => stats.repo_size.to_s,
-          "storage_max"          => stats.storage_max.to_s,
-          "num_objects"          => stats.num_objects.to_s,
-          "usage_percent"        => stats.usage_percent.round(2).to_s,
-          "atoms_stored"         => @atoms_stored.to_s,
-          "snapshots_created"    => @snapshots_created.to_s,
-          "root_cid"             => stats.root_cid.try(&.hash) || "none",
+          "integration"        => "ipfs",
+          "version"            => VERSION,
+          "status"             => @initialized ? "ready" : "not_initialized",
+          "connected"          => @client.connected?.to_s,
+          "atomspace_attached" => (!@atomspace.nil?).to_s,
+          "host"               => @config.api_host,
+          "port"               => @config.api_port.to_s,
+          "node_id"            => node_info.try(&.id) || "unknown",
+          "ipfs_version"       => @client.version,
+          "repo_size"          => stats.repo_size.to_s,
+          "storage_max"        => stats.storage_max.to_s,
+          "num_objects"        => stats.num_objects.to_s,
+          "usage_percent"      => stats.usage_percent.round(2).to_s,
+          "atoms_stored"       => @atoms_stored.to_s,
+          "snapshots_created"  => @snapshots_created.to_s,
+          "root_cid"           => stats.root_cid.try(&.hash) || "none",
         }
       end
 

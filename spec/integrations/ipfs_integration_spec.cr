@@ -2,7 +2,7 @@ require "../spec_helper"
 require "../../src/integrations/ipfs_integration"
 
 describe CrystalCog::Integrations do
-  describe IPFSConfig do
+  describe CrystalCog::Integrations::IPFSConfig do
     it "creates config with default values" do
       config = CrystalCog::Integrations::IPFSConfig.new
       config.api_host.should eq "localhost"
@@ -23,7 +23,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe IPFSCid do
+  describe CrystalCog::Integrations::IPFSCid do
     it "creates CID" do
       cid = CrystalCog::Integrations::IPFSCid.new("QmTest123")
       cid.hash.should eq "QmTest123"
@@ -52,7 +52,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe IPFSObject do
+  describe CrystalCog::Integrations::IPFSObject do
     it "creates IPFS object" do
       cid = CrystalCog::Integrations::IPFSCid.new("QmTest")
       obj = CrystalCog::Integrations::IPFSObject.new(
@@ -67,7 +67,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe IPFSLink do
+  describe CrystalCog::Integrations::IPFSLink do
     it "creates IPFS link" do
       link = CrystalCog::Integrations::IPFSLink.new(
         name: "child",
@@ -82,7 +82,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe IPFSPeer do
+  describe CrystalCog::Integrations::IPFSPeer do
     it "creates peer info" do
       peer = CrystalCog::Integrations::IPFSPeer.new(
         id: "QmPeer123",
@@ -96,7 +96,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe IPFSPinInfo do
+  describe CrystalCog::Integrations::IPFSPinInfo do
     it "creates pin info" do
       cid = CrystalCog::Integrations::IPFSCid.new("QmTest")
       pin = CrystalCog::Integrations::IPFSPinInfo.new(
@@ -109,7 +109,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe IPFSDagNode do
+  describe CrystalCog::Integrations::IPFSDagNode do
     it "creates DAG node" do
       node = CrystalCog::Integrations::IPFSDagNode.new
       node.links.should be_empty
@@ -136,7 +136,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe IPFSAtom do
+  describe CrystalCog::Integrations::IPFSAtom do
     it "creates IPFS atom" do
       atom = CrystalCog::Integrations::IPFSAtom.new(
         id: "atom-1",
@@ -190,7 +190,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe IPFSStorageStats do
+  describe CrystalCog::Integrations::IPFSStorageStats do
     it "creates storage stats" do
       cid = CrystalCog::Integrations::IPFSCid.new("QmRoot")
       stats = CrystalCog::Integrations::IPFSStorageStats.new(

@@ -94,6 +94,9 @@ module NLP
         "sentence_count"          => sentences.size,
         "average_word_length"     => avg_word_length,
         "average_sentence_length" => avg_sentence_length,
+        # Retain the concise names used by the CLI and linguistic-analysis API.
+        "avg_word_length"         => avg_word_length,
+        "avg_sentence_length"     => avg_sentence_length,
         "unique_words"            => word_tokens.uniq.size,
       }
     end
@@ -127,8 +130,20 @@ module NLP
       # Comparative/superlative
       if stemmed.ends_with?("er") && stemmed.size > 3
         stemmed = stemmed[0..-3]
+        # Comparative forms such as "bigger" double the final consonant.
+        if stemmed.size > 1 && stemmed[-1] == stemmed[-2] &&
+           stemmed[-1].ascii_letter? && !"aeiou".includes?(stemmed[-1].downcase)
+          stemmed = stemmed[0, stemmed.size - 1]
+        end
       elsif stemmed.ends_with?("est") && stemmed.size > 4
         stemmed = stemmed[0..-4]
+      end
+
+      # Reduce doubled final consonant (e.g. "bigg" -> "big", "runn" -> "run")
+      # Reduce doubled final consonant (e.g. "bigg" -> "big", "runn" -> "run")
+      # Only apply if the stem was actually modified by a previous rule (suffix was stripped)
+      if stemmed != word && stemmed.size >= 3 && stemmed[-1] == stemmed[-2] && !stemmed[-1].in?('e', 'o', 'l', 's')
+        stemmed = stemmed[0..-2]
       end
 
       stemmed

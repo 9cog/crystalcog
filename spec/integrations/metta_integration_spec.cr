@@ -2,7 +2,7 @@ require "../spec_helper"
 require "../../src/integrations/metta_integration"
 
 describe CrystalCog::Integrations do
-  describe MeTTaSymbol do
+  describe CrystalCog::Integrations::MeTTaSymbol do
     it "creates symbol" do
       sym = CrystalCog::Integrations::MeTTaSymbol.new("foo")
       sym.name.should eq "foo"
@@ -34,7 +34,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe MeTTaVariable do
+  describe CrystalCog::Integrations::MeTTaVariable do
     it "creates variable" do
       var = CrystalCog::Integrations::MeTTaVariable.new("x")
       var.name.should eq "x"
@@ -57,7 +57,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe MeTTaGrounded do
+  describe CrystalCog::Integrations::MeTTaGrounded do
     it "creates grounded integer" do
       num = CrystalCog::Integrations::MeTTaGrounded.new(42)
       num.value_type.should eq "Number"
@@ -90,7 +90,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe MeTTaExpression do
+  describe CrystalCog::Integrations::MeTTaExpression do
     it "creates expression" do
       sym = CrystalCog::Integrations::MeTTaSymbol.new("foo")
       num = CrystalCog::Integrations::MeTTaGrounded.new(42)
@@ -133,7 +133,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe MeTTaEmpty do
+  describe CrystalCog::Integrations::MeTTaEmpty do
     it "creates empty value" do
       empty = CrystalCog::Integrations::MeTTaEmpty.new
       empty.atom_type.should eq CrystalCog::Integrations::MeTTaType::Empty
@@ -141,7 +141,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe MeTTaError do
+  describe CrystalCog::Integrations::MeTTaError do
     it "creates error" do
       err = CrystalCog::Integrations::MeTTaError.new("Something went wrong")
       err.message.should eq "Something went wrong"
@@ -149,7 +149,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe MeTTaBindings do
+  describe CrystalCog::Integrations::MeTTaBindings do
     it "creates empty bindings" do
       bindings = CrystalCog::Integrations::MeTTaBindings.new
       bindings.empty?.should be_true
@@ -217,7 +217,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe MeTTaPatternMatcher do
+  describe CrystalCog::Integrations::MeTTaPatternMatcher do
     matcher = CrystalCog::Integrations::MeTTaPatternMatcher.new
 
     it "matches symbol to symbol" do
@@ -302,7 +302,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe MeTTaRule do
+  describe CrystalCog::Integrations::MeTTaRule do
     it "creates rule" do
       pattern = CrystalCog::Integrations::MeTTaExpression.new([
         CrystalCog::Integrations::MeTTaSymbol.new("inc"),
@@ -347,7 +347,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe MeTTaSpace do
+  describe CrystalCog::Integrations::MeTTaSpace do
     it "creates empty space" do
       space = CrystalCog::Integrations::MeTTaSpace.new
       space.size.should eq 0
@@ -399,7 +399,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe MeTTaParser do
+  describe CrystalCog::Integrations::MeTTaParser do
     it "parses symbol" do
       parser = CrystalCog::Integrations::MeTTaParser.new("foo")
       atoms = parser.parse
@@ -458,7 +458,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe MeTTaInterpreter do
+  describe CrystalCog::Integrations::MeTTaInterpreter do
     it "evaluates arithmetic" do
       interp = CrystalCog::Integrations::MeTTaInterpreter.new
       result = interp.eval("(+ 1 2 3)")

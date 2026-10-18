@@ -2,7 +2,7 @@ require "../spec_helper"
 require "../../src/integrations/typescript_sdk"
 
 describe CrystalCog::Integrations do
-  describe TypeScriptSDKConfig do
+  describe CrystalCog::Integrations::TypeScriptSDKConfig do
     it "creates config with default values" do
       config = CrystalCog::Integrations::TypeScriptSDKConfig.new
       config.host.should eq "0.0.0.0"
@@ -28,7 +28,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe APIResponse do
+  describe CrystalCog::Integrations::APIResponse do
     it "creates success response" do
       response = CrystalCog::Integrations::APIResponse.new(
         success: true,
@@ -63,7 +63,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe TruthValueDTO do
+  describe CrystalCog::Integrations::TruthValueDTO do
     it "creates with default values" do
       tv = CrystalCog::Integrations::TruthValueDTO.new
       tv.strength.should eq 1.0
@@ -77,7 +77,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe AttentionValueDTO do
+  describe CrystalCog::Integrations::AttentionValueDTO do
     it "creates with default values" do
       av = CrystalCog::Integrations::AttentionValueDTO.new
       av.sti.should eq 0.0
@@ -91,7 +91,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe AtomDTO do
+  describe CrystalCog::Integrations::AtomDTO do
     it "creates with default values" do
       atom = CrystalCog::Integrations::AtomDTO.new
       atom.id.should eq ""
@@ -128,7 +128,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe QueryDTO do
+  describe CrystalCog::Integrations::QueryDTO do
     it "creates query" do
       query = CrystalCog::Integrations::QueryDTO.new(
         pattern: "Dog",
@@ -150,7 +150,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe WSMessage do
+  describe CrystalCog::Integrations::WSMessage do
     it "creates message" do
       msg = CrystalCog::Integrations::WSMessage.new(
         type: CrystalCog::Integrations::WSMessageType::Subscribe,
@@ -191,7 +191,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe SDKAtomSpace do
+  describe CrystalCog::Integrations::SDKAtomSpace do
     atomspace = CrystalCog::Integrations::SDKAtomSpace.new
 
     it "starts empty" do
@@ -275,7 +275,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe TypeScriptGenerator do
+  describe CrystalCog::Integrations::TypeScriptGenerator do
     generator = CrystalCog::Integrations::TypeScriptGenerator.new
 
     it "generates type definitions" do

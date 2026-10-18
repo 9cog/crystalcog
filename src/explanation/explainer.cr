@@ -94,6 +94,12 @@ module Explanation
       @steps << step
     end
 
+    # Crystal invokes `finalize` with no arguments when registering a GC
+    # finalizer. Keep that lifecycle hook separate from the public trace
+    # completion overload below.
+    def finalize
+    end
+
     def finalize(conclusion : String, confidence : Float64)
       @final_conclusion = conclusion
       @final_confidence = confidence
@@ -905,11 +911,12 @@ module Explanation
     end
 
     def explain_last_inference : String
-      if trace = @explainer.get_trace(@explainer.traces.keys.last?)
-        trace.to_s
-      else
-        "No inference trace available"
+      if trace_id = @explainer.traces.keys.last?
+        if trace = @explainer.get_trace(trace_id)
+          return trace.to_s
+        end
       end
+      "No inference trace available"
     end
   end
 

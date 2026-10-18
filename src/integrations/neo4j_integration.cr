@@ -319,16 +319,16 @@ module CrystalCog
 
       def to_cypher_properties : String
         props = {
-          "id"                       => @id,
-          "atomType"                 => @atom_type,
-          "name"                     => @name,
-          "tvStrength"               => @truth_value_strength,
-          "tvConfidence"             => @truth_value_confidence,
-          "avSti"                    => @attention_value_sti,
-          "avLti"                    => @attention_value_lti,
-          "createdAt"                => @created_at.to_unix,
-          "updatedAt"                => @updated_at.to_unix,
-          "metadata"                 => @metadata.to_json,
+          "id"           => @id,
+          "atomType"     => @atom_type,
+          "name"         => @name,
+          "tvStrength"   => @truth_value_strength,
+          "tvConfidence" => @truth_value_confidence,
+          "avSti"        => @attention_value_sti,
+          "avLti"        => @attention_value_lti,
+          "createdAt"    => @created_at.to_unix,
+          "updatedAt"    => @updated_at.to_unix,
+          "metadata"     => @metadata.to_json,
         }
         props.to_json
       end
@@ -1173,20 +1173,20 @@ module CrystalCog
         stats = @client.connected? ? @client.get_statistics : Neo4jGraphStats.new
 
         {
-          "integration"          => "neo4j",
-          "version"              => VERSION,
-          "status"               => @initialized ? "ready" : "not_initialized",
-          "connected"            => @client.connected?.to_s,
-          "atomspace_attached"   => (!@atomspace.nil?).to_s,
-          "host"                 => @config.host,
-          "port"                 => @config.port.to_s,
-          "database"             => @config.database,
-          "node_count"           => stats.node_count.to_s,
-          "relationship_count"   => stats.relationship_count.to_s,
-          "queries_executed"     => @queries_executed.to_s,
-          "atoms_stored"         => @atoms_stored.to_s,
-          "max_connections"      => @config.max_connections.to_s,
-          "batch_size"           => @config.batch_size.to_s,
+          "integration"        => "neo4j",
+          "version"            => VERSION,
+          "status"             => @initialized ? "ready" : "not_initialized",
+          "connected"          => @client.connected?.to_s,
+          "atomspace_attached" => (!@atomspace.nil?).to_s,
+          "host"               => @config.host,
+          "port"               => @config.port.to_s,
+          "database"           => @config.database,
+          "node_count"         => stats.node_count.to_s,
+          "relationship_count" => stats.relationship_count.to_s,
+          "queries_executed"   => @queries_executed.to_s,
+          "atoms_stored"       => @atoms_stored.to_s,
+          "max_connections"    => @config.max_connections.to_s,
+          "batch_size"         => @config.batch_size.to_s,
         }
       end
 

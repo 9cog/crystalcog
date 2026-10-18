@@ -32,12 +32,12 @@ describe AgentZero::AgentNode do
       agent = AgentZero::AgentNode.new("TestAgent", port: 0)
 
       agent.start
-      sleep 0.1  # Allow server to start
+      sleep 0.1.seconds # Allow server to start
 
       agent.status.should eq(AgentZero::AgentNode::AgentStatus::Active)
 
       agent.stop
-      sleep 0.1  # Allow server to stop
+      sleep 0.1.seconds # Allow server to stop
 
       agent.status.should eq(AgentZero::AgentNode::AgentStatus::Offline)
     end
@@ -50,7 +50,7 @@ describe AgentZero::AgentNode do
 
       agent1.start
       agent2.start
-      sleep 0.1
+      sleep 0.1.seconds
 
       # Test connection between agents
       result = agent1.connect_to_peer(agent2.host, agent2.port)
@@ -60,6 +60,7 @@ describe AgentZero::AgentNode do
 
       agent1.stop
       agent2.stop
+      sleep 0.2.seconds # Allow fibers to clean up
     end
   end
 
@@ -67,15 +68,18 @@ describe AgentZero::AgentNode do
     it "handles reasoning requests with timeout" do
       agent = AgentZero::AgentNode.new("ReasoningAgent", port: 0)
       agent.start
-      sleep 0.1
+      sleep 0.1.seconds
 
       results = agent.request_collaborative_reasoning("What is consciousness?", 1)
 
       results.should be_a(Array(AgentZero::CollaborativeResult))
-      # With no peers, should return empty results quickly
-      results.size.should eq(0)
+      # With no peers, agent still contributes its own local reasoning
+      results.size.should eq(1)
+      results.first.content.should_not be_empty
+      results.first.confidence.should be > 0.0
 
       agent.stop
+      sleep 0.2.seconds # Allow fibers to clean up
     end
   end
 
@@ -83,7 +87,7 @@ describe AgentZero::AgentNode do
     it "broadcasts knowledge to network" do
       agent = AgentZero::AgentNode.new("KnowledgeAgent", port: 0)
       agent.start
-      sleep 0.1
+      sleep 0.1.seconds
 
       knowledge = AgentZero::KnowledgeItem.new(
         "test-knowledge-1",
@@ -100,6 +104,7 @@ describe AgentZero::AgentNode do
       shares.should eq(0)
 
       agent.stop
+      sleep 0.2.seconds # Allow fibers to clean up
     end
   end
 
@@ -107,7 +112,7 @@ describe AgentZero::AgentNode do
     it "returns comprehensive network status" do
       agent = AgentZero::AgentNode.new("StatusAgent", port: 0)
       agent.start
-      sleep 0.1
+      sleep 0.1.seconds
 
       status = agent.network_status
 
@@ -119,6 +124,7 @@ describe AgentZero::AgentNode do
       status["capabilities"].as_a.size.should be > 0
 
       agent.stop
+      sleep 0.2.seconds # Allow fibers to clean up
     end
   end
 end
@@ -173,7 +179,7 @@ describe AgentZero::AgentNetwork do
       agent2 = AgentZero::AgentNode.new("Agent2", port: 0)
 
       network.add_agent(agent1).should be_true
-      network.add_agent(agent2).should be_false  # Should fail due to limit
+      network.add_agent(agent2).should be_false # Should fail due to limit
 
       network.agents.size.should eq(1)
     end
@@ -194,6 +200,7 @@ describe AgentZero::AgentNetwork do
 
         # Clean up
         agent.stop
+        sleep 0.2.seconds # Allow fibers to clean up
       end
     end
 
@@ -207,6 +214,35 @@ describe AgentZero::AgentNetwork do
       agent.should be_nil
       network.agents.size.should eq(0)
     end
+
+    it "establishes mesh peer connections without connection refused errors" do
+      # Regression for CI priority issue: create_agent previously connected peers
+      # before the new agent's server was listening, logging Connection refused.
+      network = AgentZero::AgentNetwork.new("PeerConnectNetwork")
+
+      agent1 = network.create_agent("PeerAgent1")
+      agent2 = network.create_agent("PeerAgent2")
+      agent3 = network.create_agent("PeerAgent3")
+
+      agent1.should_not be_nil
+      agent2.should_not be_nil
+      agent3.should_not be_nil
+
+      if agent1 && agent2 && agent3
+        sleep 0.1.seconds
+
+        # Full mesh: each agent should know about the other two via
+        # one-way connect + introduction handshake reverse registration.
+        agent1.network_status["peer_count"].as_i64.should eq(2)
+        agent2.network_status["peer_count"].as_i64.should eq(2)
+        agent3.network_status["peer_count"].as_i64.should eq(2)
+
+        agent1.stop
+        agent2.stop
+        agent3.stop
+        sleep 0.2.seconds
+      end
+    end
   end
 
   describe "#collaborative_reasoning" do
@@ -217,12 +253,12 @@ describe AgentZero::AgentNetwork do
       agent2 = network.create_agent("ReasoningAgent2")
 
       if agent1 && agent2
-        sleep 0.1  # Allow agents to start
+        sleep 0.1.seconds # Allow agents to start
 
         result = network.collaborative_reasoning(
           "What is artificial intelligence?",
           AgentZero::AgentNetwork::AgentSelection::All,
-          5  # 5 second timeout
+          5 # 5 second timeout
         )
 
         result.should be_a(AgentZero::CollaborativeReasoningResult)
@@ -232,6 +268,7 @@ describe AgentZero::AgentNetwork do
         # Clean up
         agent1.stop
         agent2.stop
+        sleep 0.2.seconds # Allow fibers to clean up
       end
     end
 
@@ -254,7 +291,7 @@ describe AgentZero::AgentNetwork do
       agent2 = network.create_agent("KnowledgeAgent2")
 
       if agent1 && agent2
-        sleep 0.1
+        sleep 0.1.seconds
 
         knowledge = AgentZero::KnowledgeItem.new(
           "dist-knowledge-1",
@@ -275,6 +312,7 @@ describe AgentZero::AgentNetwork do
         # Clean up
         agent1.stop
         agent2.stop
+        sleep 0.2.seconds # Allow fibers to clean up
       end
     end
   end
@@ -287,7 +325,7 @@ describe AgentZero::AgentNetwork do
       agent2 = network.create_agent("StatusAgent2")
 
       if agent1 && agent2
-        sleep 0.1
+        sleep 0.1.seconds
 
         status = network.network_status
 
@@ -301,6 +339,7 @@ describe AgentZero::AgentNetwork do
         # Clean up
         agent1.stop
         agent2.stop
+        sleep 0.2.seconds # Allow fibers to clean up
       end
     end
   end
@@ -364,7 +403,7 @@ describe AgentZero::ConsensusManager do
     it "initializes consensus manager" do
       agents = [
         AgentZero::AgentNode.new("ConsensusAgent1", port: 0),
-        AgentZero::AgentNode.new("ConsensusAgent2", port: 0)
+        AgentZero::AgentNode.new("ConsensusAgent2", port: 0),
       ]
 
       manager = AgentZero::ConsensusManager.new("raft", agents)
@@ -376,7 +415,7 @@ describe AgentZero::ConsensusManager do
     it "handles consensus proposals and voting" do
       agents = [
         AgentZero::AgentNode.new("VoteAgent1", port: 0),
-        AgentZero::AgentNode.new("VoteAgent2", port: 0)
+        AgentZero::AgentNode.new("VoteAgent2", port: 0),
       ]
 
       manager = AgentZero::ConsensusManager.new("simple", agents)
@@ -406,7 +445,7 @@ describe AgentZero::ConsensusManager do
       vote2_result.should be_true
 
       # Check consensus result
-      sleep 0.1  # Allow consensus calculation
+      sleep 0.1.seconds # Allow consensus calculation
       result = manager.get_consensus_result(consensus_id)
 
       # With 2 approve votes, should be approved
@@ -432,11 +471,11 @@ describe AgentZero::TaskCoordinator do
 
       agents = [
         AgentZero::AgentNode.new("TaskAgent1", port: 0),
-        AgentZero::AgentNode.new("TaskAgent2", port: 0)
+        AgentZero::AgentNode.new("TaskAgent2", port: 0),
       ]
 
       agents.each(&.start)
-      sleep 0.1
+      sleep 0.1.seconds
 
       task = AgentZero::DistributedTask.new(
         "collaborative_reasoning",
@@ -453,6 +492,7 @@ describe AgentZero::TaskCoordinator do
       result.execution_time_ms.should be > 0
 
       agents.each(&.stop)
+      sleep 0.2.seconds # Allow fibers to clean up
     end
 
     it "executes knowledge sharing tasks" do
@@ -461,11 +501,11 @@ describe AgentZero::TaskCoordinator do
 
       agents = [
         AgentZero::AgentNode.new("ShareAgent1", port: 0),
-        AgentZero::AgentNode.new("ShareAgent2", port: 0)
+        AgentZero::AgentNode.new("ShareAgent2", port: 0),
       ]
 
       agents.each(&.start)
-      sleep 0.1
+      sleep 0.1.seconds
 
       task = AgentZero::DistributedTask.new(
         "knowledge_sharing",
@@ -481,6 +521,7 @@ describe AgentZero::TaskCoordinator do
       result.results.keys.should contain("successful_shares")
 
       agents.each(&.stop)
+      sleep 0.2.seconds # Allow fibers to clean up
     end
 
     it "handles tasks with no suitable agents" do
@@ -489,14 +530,14 @@ describe AgentZero::TaskCoordinator do
 
       # Create agents without required capabilities
       agents = [
-        AgentZero::AgentNode.new("UnspecializedAgent", port: 0)
+        AgentZero::AgentNode.new("UnspecializedAgent", port: 0),
       ]
-      agents[0].capabilities = ["basic"]  # Different from task requirements
+      agents[0].capabilities = ["basic"] # Different from task requirements
 
       task = AgentZero::DistributedTask.new(
         "specialized_task",
         "Task requiring specific capabilities",
-        ["advanced_reasoning", "quantum_computing"]  # Capabilities not available
+        ["advanced_reasoning", "quantum_computing"] # Capabilities not available
       )
 
       result = coordinator.execute_task(task, agents)
@@ -514,7 +555,7 @@ describe "Distributed Agent Network Integration" do
     # Create network
     network = AgentZero::AgentNetwork.new("IntegrationTestNetwork")
     network.start
-    sleep 0.1
+    sleep 0.1.seconds
 
     # Create multiple agents
     agent1 = network.create_agent("IntegrationAgent1", ["reasoning", "learning"])
@@ -522,7 +563,7 @@ describe "Distributed Agent Network Integration" do
     agent3 = network.create_agent("IntegrationAgent3", ["reasoning", "memory"])
 
     if agent1 && agent2 && agent3
-      sleep 0.2  # Allow agents to start and discover each other
+      sleep 0.2.seconds # Allow agents to start and discover each other
 
       # Test network status
       status = network.network_status
@@ -565,9 +606,11 @@ describe "Distributed Agent Network Integration" do
       agent1.stop
       agent2.stop
       agent3.stop
+      sleep 0.2.seconds # Allow fibers to clean up
     end
 
     network.stop
+    sleep 0.2.seconds # Allow fibers to clean up
   end
 
   it "handles network failures gracefully" do
@@ -584,11 +627,12 @@ describe "Distributed Agent Network Integration" do
     # Test with agents that stop unexpectedly
     agent = network.create_agent("UnstableAgent")
     if agent
-      agent.stop  # Stop immediately
+      agent.stop # Stop immediately
+      sleep 0.2.seconds # Allow fibers to clean up
 
       # Network should handle this gracefully
       status = network.network_status
-      status.agent_count.should eq(1)  # Still counted but not active
+      status.agent_count.should eq(1) # Still counted but not active
     end
   end
 end

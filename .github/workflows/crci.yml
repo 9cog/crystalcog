@@ -1,12 +1,26 @@
-# This CI job installs Crystal and shard dependencies, then executes `crystal spec` to run the test suite
+# This CI job installs Crystal and shard dependencies, then executes `crystal spec --stats -v` to run the test suite
 # More configuration options are available at https://crystal-lang.github.io/install-crystal/configurator.html
+#
+# Database dependencies can be disabled at compile time using environment variables:
+#   DISABLE_SQLITE3=1  - Disable SQLite3 support
+#   DISABLE_POSTGRES=1 - Disable PostgreSQL support
+#   DISABLE_ROCKSDB=1  - Disable RocksDB support
 
 on:
   push:
   pull_request:
-    branches: [master]
+    branches: [main]
   schedule:
     - cron: '0 6 * * 6'  # Every Saturday 6 AM
+# Least-privilege token by default; jobs that write declare their own permissions.
+permissions:
+  contents: read
+
+# Trace every command so CI logs show exactly what ran and what it printed.
+defaults:
+  run:
+    shell: bash -ex {0}
+
 jobs:
   test:
     strategy:
@@ -15,11 +29,18 @@ jobs:
         include:
           - os: ubuntu-latest
           - os: ubuntu-latest
-            crystal: "1.12"
+            crystal: "1.20"
           - os: ubuntu-latest
             crystal: nightly
           - os: windows-latest
+            disable_dbs: "1"
     runs-on: ${{ matrix.os }}
+    # Compile-time flags must be present for the whole job (Windows has no DB libs).
+    # Using job-level env avoids PowerShell/$GITHUB_ENV issues on windows-latest.
+    env:
+      DISABLE_ROCKSDB: ${{ matrix.disable_dbs }}
+      DISABLE_SQLITE3: ${{ matrix.disable_dbs }}
+      DISABLE_POSTGRES: ${{ matrix.disable_dbs }}
     steps:
       - name: Download source
         uses: actions/checkout@v4
@@ -33,13 +54,16 @@ jobs:
           path: ~/.cache/shards
           key: ${{ runner.os }}-shards-${{ hashFiles('shard.yml') }}
           restore-keys: ${{ runner.os }}-shards-
+      - name: Install system dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev librocksdb-dev libevent-dev libssl-dev libpq-dev
       - name: Install shards
-        run: shards update --ignore-crystal-version
+        run: shards update --verbose --ignore-crystal-version
       - name: Run tests
+        shell: bash --noprofile --norc -x -eo pipefail {0}
         run: |
           # Run tests with error handling for compiler crashes
-          crystal spec --order=random --error-trace --no-color || {
-            echo "⚠️  Test run failed, retrying with single-threaded execution..."
-            CRYSTAL_WORKERS=1 crystal spec --order=random --error-trace --no-color
+          crystal spec --stats -v --order=random --error-trace --no-color || {
+            echo "Test run failed, retrying with single-threaded execution..."
+            CRYSTAL_WORKERS=1 crystal spec --stats -v --order=random --error-trace --no-color
           }
-

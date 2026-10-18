@@ -18,12 +18,12 @@ module CognitiveAgency
 
   # Core agency parameters for optimal cognitive grip
   module Constants
-    DEFAULT_GRIP_STRENGTH = 8
+    DEFAULT_GRIP_STRENGTH       =    8
     OPTIMAL_COHERENCE_THRESHOLD = 0.85
-    MAX_ATTENTION_FOCUS = 100
-    THOUGHT_STREAM_CAPACITY = 500
-    SYNC_INTERVAL_MS = 100
-    AGENCY_MODES = [:passive, :active, :autonomous, :coordinated]
+    MAX_ATTENTION_FOCUS         =  100
+    THOUGHT_STREAM_CAPACITY     =  500
+    SYNC_INTERVAL_MS            =  100
+    AGENCY_MODES                = [:passive, :active, :autonomous, :coordinated]
   end
 
   # Unified cognitive state representation
@@ -50,18 +50,18 @@ module CognitiveAgency
     # Calculate overall agency strength
     def agency_strength : Float64
       weights = {
-        awareness: 0.2,
+        awareness:      0.2,
         intentionality: 0.25,
-        coherence: 0.25,
-        autonomy: 0.15,
-        focus: 0.15
+        coherence:      0.25,
+        autonomy:       0.15,
+        focus:          0.15,
       }
 
       (@awareness * weights[:awareness] +
-       @intentionality * weights[:intentionality] +
-       @coherence * weights[:coherence] +
-       @autonomy * weights[:autonomy] +
-       @focus * weights[:focus]) * @grip_factor
+        @intentionality * weights[:intentionality] +
+        @coherence * weights[:coherence] +
+        @autonomy * weights[:autonomy] +
+        @focus * weights[:focus]) * @grip_factor
     end
 
     # Check if agency is in optimal state
@@ -72,15 +72,15 @@ module CognitiveAgency
     # Serialize to hash
     def to_h : Hash(String, String)
       {
-        "awareness" => @awareness.to_s,
-        "intentionality" => @intentionality.to_s,
-        "coherence" => @coherence.to_s,
-        "autonomy" => @autonomy.to_s,
-        "focus" => @focus.to_s,
-        "grip_factor" => @grip_factor.to_s,
+        "awareness"       => @awareness.to_s,
+        "intentionality"  => @intentionality.to_s,
+        "coherence"       => @coherence.to_s,
+        "autonomy"        => @autonomy.to_s,
+        "focus"           => @focus.to_s,
+        "grip_factor"     => @grip_factor.to_s,
         "agency_strength" => agency_strength.to_s,
-        "optimal" => optimal?.to_s,
-        "timestamp" => @timestamp.to_s
+        "optimal"         => optimal?.to_s,
+        "timestamp"       => @timestamp.to_s,
       }
     end
 
@@ -120,12 +120,12 @@ module CognitiveAgency
 
     def to_h : Hash(String, String)
       {
-        "content" => @content,
-        "type" => @type,
-        "source" => @source,
-        "grip_state" => @grip_state.to_s,
+        "content"          => @content,
+        "type"             => @type,
+        "source"           => @source,
+        "grip_state"       => @grip_state.to_s,
         "attention_weight" => @attention_weight.to_s,
-        "timestamp" => @timestamp.to_s
+        "timestamp"        => @timestamp.to_s,
       }
     end
   end
@@ -157,9 +157,9 @@ module CognitiveAgency
 
       # Record attention event
       @attention_history << {
-        "input" => input[0, 100],
-        "tokens" => tokens.size.to_s,
-        "timestamp" => Time.utc.to_s
+        "input"     => input[0, 100],
+        "tokens"    => tokens.size.to_s,
+        "timestamp" => Time.utc.to_s,
       }
 
       if @attention_history.size > 100
@@ -200,10 +200,10 @@ module CognitiveAgency
 
     def status : Hash(String, String)
       {
-        "focus_count" => @focus_weights.size.to_s,
-        "decay_rate" => @decay_rate.to_s,
+        "focus_count"     => @focus_weights.size.to_s,
+        "decay_rate"      => @decay_rate.to_s,
         "max_focus_items" => @max_focus_items.to_s,
-        "history_size" => @attention_history.size.to_s
+        "history_size"    => @attention_history.size.to_s,
       }
     end
   end
@@ -260,10 +260,10 @@ module CognitiveAgency
       end
 
       {
-        "total_thoughts" => @thoughts.size.to_s,
-        "capacity" => @capacity.to_s,
+        "total_thoughts"     => @thoughts.size.to_s,
+        "capacity"           => @capacity.to_s,
         "processing_enabled" => @processing_enabled.to_s,
-        "types" => type_counts.to_json
+        "types"              => type_counts.to_json,
       }
     end
   end
@@ -285,12 +285,12 @@ module CognitiveAgency
       effective_strength = calculate_effective_strength(cognitive_state)
 
       {
-        "grip_applied" => "true",
-        "base_strength" => @grip_strength.to_s,
-        "effective_strength" => effective_strength.to_s,
-        "mode" => @mode.to_s,
-        "input_length" => input.size.to_s,
-        "coherence_maintained" => (cognitive_state.coherence > 0.5).to_s
+        "grip_applied"         => "true",
+        "base_strength"        => @grip_strength.to_s,
+        "effective_strength"   => effective_strength.to_s,
+        "mode"                 => @mode.to_s,
+        "input_length"         => input.size.to_s,
+        "coherence_maintained" => (cognitive_state.coherence > 0.5).to_s,
       }
     end
 
@@ -300,12 +300,12 @@ module CognitiveAgency
 
       # Adjust based on mode
       mode_multiplier = case @mode
-      when :passive    then 0.5
-      when :active     then 1.0
-      when :autonomous then 1.2
-      when :coordinated then 1.1
-      else 1.0
-      end
+                        when :passive     then 0.5
+                        when :active      then 1.0
+                        when :autonomous  then 1.2
+                        when :coordinated then 1.1
+                        else                   1.0
+                        end
 
       # Adjust based on state
       state_factor = (state.coherence + state.focus) / 2.0
@@ -336,10 +336,10 @@ module CognitiveAgency
 
     def status : Hash(String, String)
       {
-        "grip_strength" => @grip_strength.to_s,
-        "mode" => @mode.to_s,
-        "auto_adjust" => @auto_adjust.to_s,
-        "adjustment_sensitivity" => @adjustment_sensitivity.to_s
+        "grip_strength"          => @grip_strength.to_s,
+        "mode"                   => @mode.to_s,
+        "auto_adjust"            => @auto_adjust.to_s,
+        "adjustment_sensitivity" => @adjustment_sensitivity.to_s,
       }
     end
   end
@@ -400,8 +400,8 @@ module CognitiveAgency
 
       # Log coordination
       log_coordination("process", {
-        "source" => source,
-        "input_length" => input.size.to_s
+        "source"       => source,
+        "input_length" => input.size.to_s,
       })
 
       # Decay attention
@@ -421,9 +421,9 @@ module CognitiveAgency
 
       coordination_result = {
         "components_coordinated" => @component_links.size.to_s,
-        "coordination_mode" => @grip_controller.mode.to_s,
-        "coherence" => @cognitive_state.coherence.to_s,
-        "consensus" => "true"
+        "coordination_mode"      => @grip_controller.mode.to_s,
+        "coherence"              => @cognitive_state.coherence.to_s,
+        "consensus"              => "true",
       }
 
       # Update state from grip info
@@ -461,11 +461,11 @@ module CognitiveAgency
     # Get current agency state
     def get_state : Hash(String, String)
       @cognitive_state.to_h.merge({
-        "grip_strength" => @grip_controller.grip_strength.to_s,
-        "grip_mode" => @grip_controller.mode.to_s,
+        "grip_strength"     => @grip_controller.grip_strength.to_s,
+        "grip_mode"         => @grip_controller.mode.to_s,
         "attention_focuses" => @attention.focus_weights.size.to_s,
-        "thought_count" => @thought_stream.thoughts.size.to_s,
-        "linked_components" => @component_links.size.to_s
+        "thought_count"     => @thought_stream.thoughts.size.to_s,
+        "linked_components" => @component_links.size.to_s,
       })
     end
 
@@ -491,11 +491,11 @@ module CognitiveAgency
     # Get comprehensive status
     def status : Hash(String, String)
       base_status = {
-        "version" => VERSION,
-        "agency_strength" => @cognitive_state.agency_strength.to_s,
-        "optimal" => @cognitive_state.optimal?.to_s,
-        "linked_components" => @component_links.keys.join(","),
-        "coordination_log_size" => @coordination_log.size.to_s
+        "version"               => VERSION,
+        "agency_strength"       => @cognitive_state.agency_strength.to_s,
+        "optimal"               => @cognitive_state.optimal?.to_s,
+        "linked_components"     => @component_links.keys.join(","),
+        "coordination_log_size" => @coordination_log.size.to_s,
       }
 
       base_status
@@ -519,8 +519,8 @@ module CognitiveAgency
 
     private def log_coordination(event_type : String, data : Hash(String, String))
       entry = {
-        "type" => event_type,
-        "timestamp" => Time.utc.to_s
+        "type"      => event_type,
+        "timestamp" => Time.utc.to_s,
       }.merge(data)
 
       @coordination_log << entry

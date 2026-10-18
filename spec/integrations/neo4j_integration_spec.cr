@@ -2,7 +2,7 @@ require "../spec_helper"
 require "../../src/integrations/neo4j_integration"
 
 describe CrystalCog::Integrations do
-  describe Neo4jConfig do
+  describe CrystalCog::Integrations::Neo4jConfig do
     it "creates config with default values" do
       config = CrystalCog::Integrations::Neo4jConfig.new
       config.host.should eq "localhost"
@@ -34,7 +34,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe CypherQueryBuilder do
+  describe CrystalCog::Integrations::CypherQueryBuilder do
     it "builds simple match query" do
       builder = CrystalCog::Integrations::CypherQueryBuilder.new
       builder.match("(n:Node)")
@@ -109,7 +109,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe Neo4jResult do
+  describe CrystalCog::Integrations::Neo4jResult do
     it "creates empty result" do
       result = CrystalCog::Integrations::Neo4jResult.new
       result.success?.should be_true
@@ -172,7 +172,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe Neo4jStats do
+  describe CrystalCog::Integrations::Neo4jStats do
     it "creates default stats" do
       stats = CrystalCog::Integrations::Neo4jStats.new
       stats.nodes_created.should eq 0
@@ -201,7 +201,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe Neo4jAtomNode do
+  describe CrystalCog::Integrations::Neo4jAtomNode do
     it "creates atom with default values" do
       atom = CrystalCog::Integrations::Neo4jAtomNode.new(
         id: "test-1",
@@ -228,7 +228,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe Neo4jLinkRelationship do
+  describe CrystalCog::Integrations::Neo4jLinkRelationship do
     it "creates link" do
       link = CrystalCog::Integrations::Neo4jLinkRelationship.new(
         id: "link-1",
@@ -245,7 +245,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe Neo4jGraphStats do
+  describe CrystalCog::Integrations::Neo4jGraphStats do
     it "creates graph stats" do
       stats = CrystalCog::Integrations::Neo4jGraphStats.new(
         node_count: 100,
@@ -260,7 +260,7 @@ describe CrystalCog::Integrations do
     end
   end
 
-  describe AtomSpaceGraphQuery do
+  describe CrystalCog::Integrations::AtomSpaceGraphQuery do
     it "builds concept query" do
       # Note: Would need mock client for full test
       # This tests the query building pattern
